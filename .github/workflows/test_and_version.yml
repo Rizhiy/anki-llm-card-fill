@@ -44,7 +44,7 @@ jobs:
           pip install -e ".[test]"
       - name: Test with pytest
         run: |
-          pytest --cov class_cache .
+          pytest --cov class_cache --cov-branch --cov-report=xml .
       - name: Upload coverage reports to Codecov
         if: ${{ matrix.python-version == '3.12' }}
         uses: codecov/codecov-action@v4.0.1

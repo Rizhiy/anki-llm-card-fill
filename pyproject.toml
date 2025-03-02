@@ -17,7 +17,7 @@ dependencies = [
     "litellm"
 ]
 [project.optional-dependencies]
-test = ["flaky", "pytest", "pytest-cov", "replete[testing]"]
+test = ["flaky", "pytest", "pytest-cov"]
 dev = ["black", "anki_llm_card_fill[test]", "isort", "pre-commit", "ruff"]
 [tool.semantic_release]
 version_variables = ["anki_llm_card_fill/__init__.py:__version__"]

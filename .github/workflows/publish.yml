@@ -15,10 +15,11 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install flit
-      - name: Publish with flit
-        env:
-          FLIT_USERNAME: __token__
-          FLIT_PASSWORD: ${{ secrets.FLIT_PASSWORD }}
-        run: |-
-          flit publish
+      #     pip install flit
+      # TODO: We need to publish to Anki instead of PyPI
+      # - name: Publish with flit
+      #   env:
+      #     FLIT_USERNAME: __token__
+      #     FLIT_PASSWORD: ${{ secrets.FLIT_PASSWORD }}
+      #   run: |-
+      #     flit publish

@@ -14,7 +14,7 @@ conda activate anki-llm-card-fill
 
 Install the dependencies:
 ```bash
-pip install -r .
+pip install -r ".[dev]"
 ```
 
 
