@@ -1,0 +1,63 @@
+[build-system]
+requires = ["flit_core>=3.2,<4"]
+build-backend = "flit_core.buildapi"
+[tool.flit.sdist]
+include = ["README.md"]
+exclude = [".github", ".gitignore", "tests"]
+
+[project]
+name = "anki-llm-card-fill"
+dynamic = ["description", "version"]
+readme = "README.md"
+maintainers = [{ name = "Artem Vasenin", email = "vasart169@gmail.com" }]
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+    "anki>=2.1.45",
+    "litellm"
+]
+[project.optional-dependencies]
+test = ["flaky", "pytest", "pytest-cov", "replete[testing]"]
+dev = ["black", "anki_llm_card_fill[test]", "isort", "pre-commit", "ruff"]
+[tool.semantic_release]
+version_variables = ["anki_llm_card_fill/__init__.py:__version__"]
+
+[tool.black]
+line-length = 120
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.yamlfix]
+line_length = 120
+section_whitelines = 1
+
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+
+[tool.ruff.lint]
+preview = true
+select = ["A", "ARG", "B", "BLE", "C4", "COM", "E", "ERA", "F", "FBT", "FIX", "FLY", "FURB", "I", "IC", "INP", "ISC", "LOG", "N", "NPY", "PERF", "PIE", "PT", "PTH", "Q", "R", "RET", "RSE", "S", "SIM", "SLF", "T20", "TCH", "TD", "TID", "TRY", "UP", "W"]
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+ignore = ["A003", "A005", "B905", "E203", "FIX002", "FURB113", "N817", "PTH123", "RET503", "S113", "TD002", "TD003", "TRY003", "UP007", "UP035"]
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = [
+    "F401", # Allow unused imports in module files
+]
+"tests/**/*.py" = [
+    "E501",   # Test strings can be long
+    "S101",   # Asserts in tests are fine
+    "T201",   # Prints are useful for debugging
+    "TCH001",
+    "TCH002",
+    "TCH003", # Tests don't need to be super performant, prefer simpler code
+]
+"tests/pickle.py" = [
+    "S301", # Testing pickle so have to use it
+]
+"tests/data/**/*.py" = [
+    "TID252", # Have to use relative imports in configs
+]
