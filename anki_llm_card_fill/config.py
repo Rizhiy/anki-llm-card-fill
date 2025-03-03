@@ -144,16 +144,23 @@ class ConfigDialog(QDialog):
 
         # Field mappings section
         self._field_mappings_label = QLabel("Field Descriptions:")
+        self._field_description_note = QLabel(
+            "<b>Field Descriptions Format:</b><br>"
+            "Specify fields using the format:<br>"
+            "<code>&lt;field name&gt;: &lt;description for the field&gt;</code>, one per line.<br>"
+            "Example:<br>"
+            "<code>Definition: A definition of the concept</code><br>"
+            "<code>Mnemonic: A memory aid for remembering this concept</code>",
+        )
+        self._field_description_note.setWordWrap(True)
+        self._templates_layout.addWidget(self._field_description_note)
         self._templates_layout.addWidget(self._field_mappings_label)
 
         self._field_mappings_input = QTextEdit()
         self._field_mappings_input.setPlaceholderText(
-            "Define each field and what content should be generated for it.\n\n"
-            "Example:\n"
-            "Back: A detailed explanation of the concept\n"
-            "Example: A practical example of the concept\n"
-            "Mnemonic: A memory aid for remembering this concept",
+            "Example: A practical example of the concept\nMnemonic: A memory aid for remembering this concept",
         )
+        self._field_mappings_input.setFixedHeight(80)
         self._templates_layout.addWidget(self._field_mappings_input)
 
         # Preview section
