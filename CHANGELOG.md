@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v0.3.0 (2025-03-03)
+
+### Bug Fixes
+
+- Fix update of model list
+  ([`27b73ce`](https://github.com/Rizhiy/anki-llm-card-fill/commit/27b73cebe95df2779c3c9a5685e9cc7180063076))
+
+### Chores
+
+- Add default config
+  ([`3ede304`](https://github.com/Rizhiy/anki-llm-card-fill/commit/3ede3044c316110f0a942abd6de3569531c6e874))
+
+### Features
+
+- Add more hints and explain how to use in README
+  ([`950d3cc`](https://github.com/Rizhiy/anki-llm-card-fill/commit/950d3cc3dc7a53466a914bcd75dca28f6d9e544b))
+
+
 ## v0.2.0 (2025-03-03)
 
 ### Chores
