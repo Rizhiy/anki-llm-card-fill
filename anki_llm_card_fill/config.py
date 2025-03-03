@@ -1,5 +1,17 @@
 from aqt import mw
-from aqt.qt import QComboBox, QDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout, QTextEdit, QTabWidget, QSpinBox, QDoubleSpinBox, QWidget
+from aqt.qt import (
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSpinBox,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 from aqt.utils import showInfo
 from PyQt6.QtCore import Qt
 
@@ -62,7 +74,7 @@ class ConfigDialog(QDialog):
         self._general_layout.addWidget(self._api_key_input)
 
         # Link to get API key
-        self._api_key_link = QLabel('')
+        self._api_key_link = QLabel("")
         self._api_key_link.setOpenExternalLinks(True)
         self._api_key_link.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._general_layout.addWidget(self._api_key_link)
@@ -190,7 +202,7 @@ class DebugDialog(QDialog):
         try:
             response = client(prompt)
             self._output_display.setText(response)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self._output_display.setText(f"Error querying API: {e}")
 
 
