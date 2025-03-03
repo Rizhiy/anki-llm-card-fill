@@ -14,7 +14,7 @@ license = { file = "LICENSE" }
 requires-python = ">=3.9"
 dependencies = [ "anki>=2.1.45", "aqt" ]
 [project.optional-dependencies]
-test = ["flaky", "pytest", "pytest-cov"]
+test = ["flaky", "pytest", "pytest-cov", "pytest-qt"]
 dev = ["black", "anki_llm_card_fill[test]", "isort", "pre-commit", "ruff"]
 [tool.semantic_release]
 version_variables = ["anki_llm_card_fill/__init__.py:__version__"]

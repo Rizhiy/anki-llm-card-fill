@@ -1,6 +1,6 @@
 import pytest
 
-from anki_llm_card_fill.llm import LLMClient
+from anki_llm_card_fill.llm import AnthropicClient, LLMClient, OpenAIClient
 
 
 class TestLLMClient:
@@ -26,5 +26,12 @@ class TestLLMClientImpl:
         assert all(isinstance(name, str) for name in models)
 
     def test_call(self, client_cls):
-        client = client_cls()
+        if client_cls == AnthropicClient:
+            model = "claude-3-haiku-20240307"
+        elif client_cls == OpenAIClient:
+            model = "gpt-4o"
+        else:
+            raise ValueError(f"Unsupported client: {client_cls}")
+
+        client = client_cls(model=model, temperature=0.5, max_length=16)
         assert isinstance(client("Hello"), str)

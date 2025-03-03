@@ -195,9 +195,11 @@ class DebugDialog(QDialog):
         client_name = config.get("client", "OpenAI")
         model_name = config.get("model", "")
         api_key = config.get("api_key", "")
+        temperature = config.get("temperature", 0.5)
+        max_length = config.get("max_length", 200)
 
         client_cls = LLMClient.get_client(client_name)
-        client = client_cls(api_key, model_name)
+        client = client_cls(api_key=api_key, model=model_name, temperature=temperature, max_length=max_length)
 
         try:
             response = client(prompt)
