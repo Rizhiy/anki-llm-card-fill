@@ -80,10 +80,10 @@ class OpenAIClient(LLMClient):
             {"model": self.model, "messages": [{"role": "user", "content": prompt}], "max_tokens": 1000},
         ).encode("utf-8")
 
-        request = urllib.request.Request(self._api_url, data=data, headers=headers)
+        request = urllib.request.Request(self._api_url, data=data, headers=headers)  # noqa: S310
 
         # Let exceptions propagate to the caller
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request) as response:  # noqa: S310
             result = json.loads(response.read().decode())
             return result["choices"][0]["message"]["content"].strip()
 
@@ -119,10 +119,10 @@ class AnthropicClient(LLMClient):
             {"model": self.model, "messages": [{"role": "user", "content": prompt}], "max_tokens": 1000},
         ).encode("utf-8")
 
-        request = urllib.request.Request(self._api_url, data=data, headers=headers)
+        request = urllib.request.Request(self._api_url, data=data, headers=headers)  # noqa: S310
 
         # Let exceptions propagate to the caller
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request) as response:  # noqa: S310
             result = json.loads(response.read().decode())
             return result["content"][0]["text"].strip()
 
