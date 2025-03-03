@@ -32,6 +32,8 @@ Example prompt I use for generating Japanese sentences:
   Hint translation: English translation of the example sentence
   ```
 
+After saving the configuration, you can use the shortcut (Ctrl+A by default) or option in the submenu to update the card once it comes up for review.
+
 ## Development
 
 Create a virtual environment with your preferred method.

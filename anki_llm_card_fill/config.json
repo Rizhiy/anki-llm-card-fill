@@ -1,1 +1,7 @@
-{}
+{
+    "client": "OpenAI",
+    "model": "gpt-4o",
+    "temperature": 0.7,
+    "max_length": 250,
+    "shortcut": "Ctrl+A"
+}
