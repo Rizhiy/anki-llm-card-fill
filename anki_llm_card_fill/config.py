@@ -65,6 +65,7 @@ class ConfigDialog(QDialog):
         self._client_label = QLabel("Select Client:")
         self._client_selector = QComboBox()
         self._client_selector.addItems(LLMClient.get_available_clients())
+        self._client_selector.currentIndexChanged.connect(self._update_model_list)
         self._general_layout.addRow(self._client_label, self._client_selector)
 
         # Model selection
