@@ -12,10 +12,7 @@ readme = "README.md"
 maintainers = [{ name = "Artem Vasenin", email = "vasart169@gmail.com" }]
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
-dependencies = [
-    "anki>=2.1.45",
-    "litellm"
-]
+dependencies = [ "anki>=2.1.45", "aqt" ]
 [project.optional-dependencies]
 test = ["flaky", "pytest", "pytest-cov"]
 dev = ["black", "anki_llm_card_fill[test]", "isort", "pre-commit", "ruff"]
