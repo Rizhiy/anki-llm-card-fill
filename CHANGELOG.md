@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.4.0 (2025-04-17)
+
+### Features
+
+- Add ability to use LLM from editor window
+  ([`2d3d208`](https://github.com/Rizhiy/anki-llm-card-fill/commit/2d3d208056910b03df1c72cc20e45de930902cca))
+
+- Allow updating multiple cards at once from browser
+  ([`5df4fac`](https://github.com/Rizhiy/anki-llm-card-fill/commit/5df4facbf485f2a8cb562873c7b04f66815c2384))
+
+### Performance Improvements
+
+- Make all calls in separate thread to not block the UI
+  ([`3999b32`](https://github.com/Rizhiy/anki-llm-card-fill/commit/3999b3287a114c481593847578289b0c5f57f66f))
+
+
 ## v0.3.0 (2025-03-03)
 
 ### Bug Fixes
