@@ -44,6 +44,7 @@ def construct_prompt(template: str, field_mappings: dict[str, str], card_fields:
         prompt += f'  "{field}": "Content for {field}",\n'
     prompt += "  ...\n}"
     prompt += "\nYour response should be a valid JSON, so I can parse it directly."
+    prompt += "\nThe response should contain only one combination."
 
     return prompt
 
@@ -59,6 +60,6 @@ def parse_llm_response(response: str) -> dict[str, str]:
             json_str = json_match.group(0)
             return json.loads(json_str)
         except json.JSONDecodeError:
-            return {"error": "Failed to parse JSON from response"}
+            return {"error": f"Failed to parse JSON from response:\n{response}"}
 
     return {"error": "No JSON found in response"}

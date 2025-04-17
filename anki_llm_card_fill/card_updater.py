@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from aqt import mw
@@ -9,16 +10,14 @@ from .llm import LLMClient
 from .utils import construct_prompt, parse_field_mappings, parse_llm_response
 
 if TYPE_CHECKING:
-    from anki.cards import Card
+    from anki.notes import Note
+    from aqt.editor import Editor
+
+logger = logging.getLogger()
 
 
-def update_card_fields(card: Card | None = None) -> None:
-    """Update the current card's fields using LLM."""
-    card = card or mw.reviewer.card
-    if card is None:
-        showInfo("Can't determine card to update")
-        return
-
+def update_note_fields(note: Note) -> None:
+    """Update a note's fields using LLM. This is the core implementation used by other functions."""
     # Get configuration
     config = mw.addonManager.getConfig(__name__)
     if not config:
@@ -26,17 +25,17 @@ def update_card_fields(card: Card | None = None) -> None:
         return
 
     # Get LLM client configuration
-    client_name = config.get("client", "OpenAI")
-    model_name = config.get("model", "")
-    api_key = config.get("api_key", "")
-    temperature = config.get("temperature", 0.5)
-    max_length = config.get("max_length", 1000)
+    client_name = config["client"]
+    model_name = config["model"]
+    api_key = config["api_key"]
+    temperature = config["temperature"]
+    max_length = config["max_length"]
 
     # Get template configuration
     global_prompt = config.get("global_prompt", "")
     field_mappings_text = config.get("field_mappings", "")
 
-    if not global_prompt or not field_mappings_text:
+    if not (global_prompt and field_mappings_text):
         showInfo("Please configure the prompt template and field mappings in the settings")
         return
 
@@ -46,10 +45,8 @@ def update_card_fields(card: Card | None = None) -> None:
         showInfo("No valid field mappings found")
         return
 
-    note = card.note()
-
     # Construct prompt
-    prompt = construct_prompt(global_prompt, field_mappings, note)
+    prompt = construct_prompt(global_prompt, field_mappings, dict(note.items()))
 
     # Initialize LLM client
     try:
@@ -83,5 +80,32 @@ def update_card_fields(card: Card | None = None) -> None:
     note.flush()
     tooltip("Card fields updated successfully!")
 
-    # Reload the card and ensure focus
+
+def update_reviewer_card() -> None:
+    """Update the current card being reviewed."""
+    card = mw.reviewer.card
+    if not card:
+        showInfo("No card is being reviewed.")
+        return
+
+    note = card.note()
+    update_note_fields(note)
+
+    # Redraw the current card
     mw.reviewer._redraw_current_card()  # noqa: SLF001
+
+
+def update_editor_note(editor: Editor) -> None:
+    """Update the note currently open in the editor."""
+    note = editor.note
+    if not note:
+        showInfo("No note is currently being edited.")
+        return
+
+    update_note_fields(note)
+
+    # Refresh the editor view
+    editor.loadNoteKeepingFocus()
+    # If reviewer is also open, reload that as well
+    if mw.reviewer.card:
+        mw.reviewer._redraw_current_card()  # noqa: SLF001
