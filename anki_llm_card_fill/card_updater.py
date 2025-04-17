@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import concurrent.futures
 import logging
 from typing import TYPE_CHECKING
 
 from aqt import mw
-from aqt.qt import QApplication, QMessageBox, QProgressDialog, Qt
+from aqt.qt import QApplication, QMessageBox, QObject, QProgressDialog, QRunnable, Qt, QThreadPool, pyqtSignal
 from aqt.utils import showInfo, tooltip
 
 from .llm import LLMClient
@@ -19,70 +18,124 @@ if TYPE_CHECKING:
 logger = logging.getLogger()
 
 
-def update_note_fields(note: Note) -> bool:
-    """Update a note's fields using LLM. This is the core implementation used by other functions.
+class NoteProcessSignals(QObject):
+    """Signals for note processing."""
 
+    error = pyqtSignal(Exception)  # Error if any
+    completed = pyqtSignal(bool)  # Success status
+
+
+class NoteUpdateWorker(QRunnable):
+    """Worker for updating a note with LLM content."""
+
+    def __init__(self, note: Note, signals: NoteProcessSignals = None):
+        super().__init__()
+        self.note = note
+        self.signals = signals or NoteProcessSignals()
+
+    def run(self):
+        """Perform the full note update process."""
+        try:
+            # Get configuration
+            config = mw.addonManager.getConfig(__name__)
+            if not config:
+                logger.error("Configuration not found")
+                self.signals.completed.emit(False)
+                return
+
+            # Get LLM client configuration
+            client_name = config["client"]
+            model_name = config["model"]
+            api_key = config["api_key"]
+            temperature = config["temperature"]
+            max_length = config["max_length"]
+
+            # Get template configuration
+            global_prompt = config.get("global_prompt", "")
+            field_mappings_text = config.get("field_mappings", "")
+
+            if not (global_prompt and field_mappings_text):
+                logger.error("Prompt template or field mappings not configured")
+                self.signals.completed.emit(False)
+                return
+
+            # Parse field mappings
+            field_mappings = parse_field_mappings(field_mappings_text)
+            if not field_mappings:
+                logger.error("No valid field mappings found")
+                self.signals.completed.emit(False)
+                return
+
+            # Construct prompt
+            prompt = construct_prompt(global_prompt, field_mappings, dict(self.note.items()))
+
+            # Initialize LLM client
+            client_cls = LLMClient.get_client(client_name)
+            client = client_cls(model=model_name, temperature=temperature, max_length=max_length, api_key=api_key)
+
+            # Call LLM
+            response = client(prompt)
+
+            # Parse response
+            field_updates = parse_llm_response(response)
+            if "error" in field_updates:
+                logger.error(f"Error parsing response for note {self.note.id}: {field_updates['error']}")
+                self.signals.completed.emit(False)
+                return
+
+            # Update fields
+            for field_name, content in field_updates.items():
+                if field_name in self.note:
+                    self.note[field_name] = content
+
+            # Save changes
+            self.note.flush()
+
+            # Signal success
+            self.signals.completed.emit(True)
+
+        except Exception as e:
+            logger.exception(f"Error updating note {self.note.id}")
+            self.signals.error.emit(e)
+            self.signals.completed.emit(False)
+
+
+def update_note_fields(note: Note) -> bool:
+    """Update a note's fields using LLM in a background thread.
+
+    This function blocks until the update is complete but keeps the UI responsive.
     Returns True if update was successful, False otherwise.
     """
-    # Get configuration
-    config = mw.addonManager.getConfig(__name__)
-    if not config:
-        logger.error("Configuration not found")
-        return False
+    success = False
+    completed = False
 
-    # Get LLM client configuration
-    client_name = config["client"]
-    model_name = config["model"]
-    api_key = config["api_key"]
-    temperature = config["temperature"]
-    max_length = config["max_length"]
+    # Create a signals object for this single note
+    signals = NoteProcessSignals()
 
-    # Get template configuration
-    global_prompt = config.get("global_prompt", "")
-    field_mappings_text = config.get("field_mappings", "")
+    # Connect signals
+    def on_completed(result):
+        nonlocal success, completed
+        success = result
+        completed = True
 
-    if not (global_prompt and field_mappings_text):
-        logger.error("Prompt template or field mappings not configured")
-        return False
+    signals.completed.connect(on_completed)
 
-    # Parse field mappings
-    field_mappings = parse_field_mappings(field_mappings_text)
-    if not field_mappings:
-        logger.error("No valid field mappings found")
-        return False
+    # Create and start the worker directly
+    worker = NoteUpdateWorker(note, signals)
 
-    # Construct prompt
-    prompt = construct_prompt(global_prompt, field_mappings, dict(note.items()))
+    # Start with the global thread pool
+    tooltip("Calling LLM...")
+    QThreadPool.globalInstance().start(worker)
 
-    # Initialize LLM client
-    try:
-        client_cls = LLMClient.get_client(client_name)
-        client = client_cls(model=model_name, temperature=temperature, max_length=max_length, api_key=api_key)
-    except Exception:
-        logger.exception(f"Error initializing LLM client for note {note.id}")
-        return False
+    # Process events while waiting for completion
+    while not completed:
+        QApplication.processEvents()
 
-    # Call LLM
-    try:
-        response = client(prompt)
-    except Exception:
-        logger.exception(f"Error calling LLM for note {note.id}")
-        return False
+    # Return the result
+    if success:
+        tooltip("Card fields updated successfully!")
 
-    # Parse response
-    field_updates = parse_llm_response(response)
-    if "error" in field_updates:
-        logger.error(f"Error parsing response for note {note.id}: {field_updates['error']}")
-        return False
-
-    # Update fields
-    for field_name, content in field_updates.items():
-        if field_name in note:
-            note[field_name] = content
-
-    # Save changes
-    note.flush()
-    return True
+    return success
 
 
 def update_reviewer_card() -> None:
@@ -93,10 +146,9 @@ def update_reviewer_card() -> None:
         return
 
     note = card.note()
-    update_note_fields(note)
-
-    # Redraw the current card
-    mw.reviewer._redraw_current_card()  # noqa: SLF001
+    if update_note_fields(note):
+        # Redraw the current card
+        mw.reviewer._redraw_current_card()  # noqa: SLF001
 
 
 def update_editor_note(editor: Editor) -> None:
@@ -106,13 +158,12 @@ def update_editor_note(editor: Editor) -> None:
         showInfo("No note is currently being edited.")
         return
 
-    update_note_fields(note)
-
-    # Refresh the editor view
-    editor.loadNoteKeepingFocus()
-    # If reviewer is also open, reload that as well
-    if mw.reviewer.card:
-        mw.reviewer._redraw_current_card()  # noqa: SLF001
+    if update_note_fields(note):
+        # Refresh the editor view
+        editor.loadNoteKeepingFocus()
+        # If reviewer is also open, reload that as well
+        if mw.reviewer.card:
+            mw.reviewer._redraw_current_card()  # noqa: SLF001
 
 
 def update_browser_notes(browser: Browser) -> None:
@@ -135,7 +186,7 @@ def update_browser_notes(browser: Browser) -> None:
         if confirm != QMessageBox.StandardButton.Yes:
             return
 
-    # Process the notes in parallel
+    # Process multiple notes in parallel
     tooltip(f"Processing {len(notes)} notes with LLM...")
     process_notes_in_parallel(notes)
 
@@ -144,13 +195,14 @@ def update_browser_notes(browser: Browser) -> None:
 
 
 def process_notes_in_parallel(notes: list[Note]) -> None:
-    """Process multiple notes in parallel using ThreadPoolExecutor with progress dialog."""
+    """Process multiple notes using QThreadPool with progress dialog."""
     if not notes:
         return
 
     total_notes = len(notes)
     completed = 0
     success_count = 0
+    canceled = False
 
     # Create progress dialog
     progress = QProgressDialog("Processing notes with LLM...", "Cancel", 0, total_notes, mw)
@@ -159,50 +211,50 @@ def process_notes_in_parallel(notes: list[Note]) -> None:
     progress.setMinimumDuration(0)  # Show immediately
     progress.setValue(0)
 
-    # Use ThreadPoolExecutor to process notes in parallel
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Submit all tasks and collect futures
-        futures = []
-        for note in notes:
-            if progress.wasCanceled():
-                break
-            futures.append(executor.submit(update_note_fields, note))
+    # Create signal handler
+    signals = NoteProcessSignals()
 
-        remaining_futures = list(futures)
+    # Connect signals
+    def on_note_completed(success):
+        nonlocal completed, success_count
+        if canceled:
+            return
 
-        # Process futures until all are done or canceled
-        while remaining_futures and not progress.wasCanceled():
-            # Wait for the next future to complete
-            for future in concurrent.futures.as_completed(remaining_futures):
-                remaining_futures.remove(future)
+        completed += 1
+        if success:
+            success_count += 1
 
-                completed += 1
+        progress.setValue(completed)
+        progress.setLabelText(f"Processing notes with LLM... ({completed}/{total_notes})")
 
-                # Check if the future completed successfully
-                if not future.exception():
-                    success_count += 1
-                else:
-                    # Log the exception
-                    logger.error("Error processing note", exc_info=future.exception())
+        # If all notes are processed, show final message
+        if completed >= total_notes:
+            if success_count == total_notes:
+                tooltip(f"Successfully updated all {total_notes} notes!")
+            else:
+                tooltip(f"Updated {success_count} of {total_notes} notes. Check logs for errors.")
+            progress.close()
 
-                # Update progress bar
-                progress.setValue(completed)
-                progress.setLabelText(f"Processing notes with LLM... ({completed}/{total_notes})")
+    signals.completed.connect(on_note_completed)
 
-                # Check for cancellation after each future completes
-                if progress.wasCanceled():
-                    break
-
-                # Allow UI to process events
-                QApplication.processEvents()
-
-    # Finish progress dialog
-    progress.setValue(total_notes)
-
-    # Show final completion message
-    if progress.wasCanceled():
+    # Handle cancellation
+    def on_canceled():
+        nonlocal canceled
+        canceled = True
         tooltip(f"Operation canceled. Processed {completed} of {total_notes} notes.")
-    elif success_count == total_notes:
-        tooltip(f"Successfully updated all {total_notes} notes!")
-    else:
-        tooltip(f"Updated {success_count} of {total_notes} notes. Check logs for errors.")
+
+    progress.canceled.connect(on_canceled)
+
+    # Submit tasks to thread pool
+    pool = QThreadPool.globalInstance()
+    for note in notes:
+        if canceled:
+            break
+        worker = NoteUpdateWorker(note, signals)
+        pool.start(worker)
+
+    # Create a local event loop
+    while completed < total_notes and not canceled:
+        QApplication.processEvents()
+        if progress.wasCanceled() and not canceled:
+            on_canceled()

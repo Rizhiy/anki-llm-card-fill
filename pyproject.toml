@@ -39,7 +39,7 @@ preview = true
 select = ["A", "ARG", "B", "BLE", "C4", "COM", "E", "ERA", "F", "FBT", "FIX", "FLY", "FURB", "I", "IC", "INP", "ISC", "LOG", "N", "NPY", "PERF", "PIE", "PT", "PTH", "Q", "R", "RET", "RSE", "S", "SIM", "SLF", "T20", "TCH", "TD", "TID", "TRY", "UP", "W"]
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
-ignore = ["A003", "A005", "B905", "E203", "FIX002", "FURB113", "N817", "PTH123", "RET503", "S113", "TD002", "TD003", "TRY003", "UP007", "UP035", "BLE001"]
+ignore = ["A003", "A005", "B905", "E203", "FIX002", "FURB113", "N817", "PTH123", "RET503", "S113", "TD002", "TD003", "TRY003", "UP007", "UP035", "BLE001", "FBT003"]
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = [
     "F401", # Allow unused imports in module files
