@@ -33,6 +33,7 @@ Example prompt I use for generating Japanese sentences:
   ```
 
 After saving the configuration, you can use the shortcut (Ctrl+A by default) or option in the submenu to update the card once it comes up for review.
+You can also update the note from editor window using the "LLM" button or update multiple notes at once using the right-click menu.
 
 ## Development
 
