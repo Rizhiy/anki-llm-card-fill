@@ -7,6 +7,8 @@ from aqt import mw
 from aqt.qt import QApplication, QMessageBox, QObject, QProgressDialog, QRunnable, Qt, QThreadPool, pyqtSignal
 from aqt.utils import showInfo, tooltip
 
+from anki_llm_card_fill.config import ConfigDialog
+
 from .llm import LLMClient
 from .utils import construct_prompt, parse_field_mappings, parse_llm_response
 
@@ -55,8 +57,8 @@ class NoteUpdateWorker(QRunnable):
 
             # Get LLM client configuration
             client_name = config["client"]
-            model_name = config["model"]
-            api_key = config["api_key"]
+            model_name = ConfigDialog.get_model_for_client(client_name)
+            api_key = ConfigDialog.get_api_key_for_client(client_name)
             temperature = config["temperature"]
             max_length = config["max_length"]
             max_prompt_tokens = config["max_prompt_tokens"]
