@@ -2,6 +2,8 @@ import json
 import re
 from typing import Mapping
 
+from .html_to_markdown import html_to_markdown
+
 
 def parse_field_mappings(field_mappings_text: str) -> dict[str, str]:
     """Parse the field mappings text into a dictionary."""
@@ -29,7 +31,9 @@ def construct_prompt(template: str, field_mappings: dict[str, str], card_fields:
     prompt = template
     for field_name, field_value in card_fields.items():
         placeholder = "{" + field_name + "}"
-        prompt = prompt.replace(placeholder, field_value)
+        # Convert HTML to Markdown for better prompt readability
+        md_value = html_to_markdown(field_value)
+        prompt = prompt.replace(placeholder, md_value)
 
     # Add field mapping instructions
     prompt += "\n\nPlease generate content for these fields:\n"

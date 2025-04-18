@@ -6,8 +6,11 @@ from aqt.qt import (
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     QSpinBox,
     QTabWidget,
@@ -16,7 +19,7 @@ from aqt.qt import (
     QWidget,
 )
 from aqt.utils import showInfo
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QKeySequence
 
 from .llm import LLMClient
@@ -53,6 +56,8 @@ class ConfigDialog(QDialog):
         self._layout.addWidget(self._debug_button)
 
         self.setLayout(self._layout)
+
+        # Update model list first, then load config to preserve selected model
         self._update_model_list()
         self._load_existing_config()
 
@@ -65,7 +70,7 @@ class ConfigDialog(QDialog):
         self._client_label = QLabel("Select Client:")
         self._client_selector = QComboBox()
         self._client_selector.addItems(LLMClient.get_available_clients())
-        self._client_selector.currentIndexChanged.connect(self._update_model_list)
+        self._client_selector.currentIndexChanged.connect(self._on_client_changed)
         self._general_layout.addRow(self._client_label, self._client_selector)
 
         # Model selection
@@ -76,6 +81,8 @@ class ConfigDialog(QDialog):
         # API Key input
         self._api_key_label = QLabel("Enter your API key:")
         self._api_key_input = QLineEdit()
+        # Connect API key changes to update model list
+        self._api_key_input.textChanged.connect(self._on_api_key_changed)
         self._general_layout.addRow(self._api_key_label, self._api_key_input)
 
         # Link to get API key
@@ -112,12 +119,19 @@ class ConfigDialog(QDialog):
         self._params_layout.addRow(self._temperature_label, self._temperature_input)
 
         # Max length setting
-        self._max_length_label = QLabel("Max Length:")
+        self._max_length_label = QLabel("Max Response Length (tokens):")
         self._max_length_input = QSpinBox()
-        self._max_length_input.setRange(1, 2048)
+        self._max_length_input.setRange(1, 4096)
         self._params_layout.addRow(self._max_length_label, self._max_length_input)
 
-        self._tab_widget.addTab(self._params_tab, "Model Parameters")
+        # Add max prompt tokens setting
+        self._max_prompt_tokens_label = QLabel("Max Prompt Length (tokens):")
+        self._max_prompt_tokens_label.setToolTip("Limit the maximum length of prompts to avoid excessive token usage")
+        self._max_prompt_tokens_input = QSpinBox()
+        self._max_prompt_tokens_input.setRange(1, 4096)
+        self._params_layout.addRow(self._max_prompt_tokens_label, self._max_prompt_tokens_input)
+
+        self._tab_widget.addTab(self._params_tab, "Request Parameters")
 
     def _setup_templates_tab(self):
         # Templates tab
@@ -130,6 +144,18 @@ class ConfigDialog(QDialog):
         )
         self._template_instructions.setWordWrap(True)
         self._templates_layout.addWidget(self._template_instructions)
+
+        # Add HTML to Markdown conversion note
+        self._html_md_note = QLabel(
+            "<b>Note:</b> Basic HTML tags in card fields are automatically converted to Markdown "
+            "format when inserted into prompts. Stuff like bold, italic, lists, etc. "
+            "You can use preview below to see the converted markdown, by selecting a card.",
+        )
+        self._html_md_note.setWordWrap(True)
+        self._html_md_note.setStyleSheet(
+            "color: #555; font-size: 11px; background-color: #f8f8f8; padding: 5px; border-radius: 3px;",
+        )
+        self._templates_layout.addWidget(self._html_md_note)
 
         # Global prompt section
         self._global_prompt_label = QLabel("Global Prompt Template:")
@@ -163,9 +189,36 @@ class ConfigDialog(QDialog):
         self._field_mappings_input.setFixedHeight(80)
         self._templates_layout.addWidget(self._field_mappings_input)
 
-        # Preview section
+        # Preview section with controls for card selection
+        preview_header = QWidget()
+        preview_layout = QHBoxLayout(preview_header)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+
         self._preview_label = QLabel("Prompt Preview:")
-        self._templates_layout.addWidget(self._preview_label)
+        preview_layout.addWidget(self._preview_label, 1)
+
+        # Add select card button
+        self._select_card_button = QPushButton("Select Card for Preview")
+        self._select_card_button.clicked.connect(self._select_card_for_preview)
+        preview_layout.addWidget(self._select_card_button)
+
+        # Add clear selection button
+        self._clear_card_button = QPushButton("Use Placeholders")
+        self._clear_card_button.clicked.connect(self._clear_preview_card)
+        self._clear_card_button.setEnabled(False)  # Initially disabled
+        preview_layout.addWidget(self._clear_card_button)
+
+        self._templates_layout.addWidget(preview_header)
+
+        # Add card info label
+        self._card_info_label = QLabel("Using placeholder values for preview")
+        self._card_info_label.setStyleSheet("font-style: italic;")
+        self._templates_layout.addWidget(self._card_info_label)
+
+        # Add token count display
+        self._token_count_label = QLabel("")
+        self._token_count_label.setStyleSheet("font-weight: bold;")
+        self._templates_layout.addWidget(self._token_count_label)
 
         self._preview_output = QTextEdit()
         self._preview_output.setReadOnly(True)
@@ -175,8 +228,12 @@ class ConfigDialog(QDialog):
         # Connect signals to update preview
         self._global_prompt_input.textChanged.connect(self._update_prompt_preview)
         self._field_mappings_input.textChanged.connect(self._update_prompt_preview)
+        self._max_prompt_tokens_input.valueChanged.connect(self._update_prompt_preview)
 
         self._tab_widget.addTab(self._templates_tab, "Templates")
+
+        # Initialize selected card variable
+        self._selected_note = None
 
     def _open_debug_dialog(self):
         dialog = DebugDialog(self, initial_prompt=self._preview_output.toPlainText())
@@ -188,45 +245,100 @@ class ConfigDialog(QDialog):
 
     def _load_existing_config(self):
         config = mw.addonManager.getConfig(__name__)
-        if config:
-            client_name = config.get("client", "OpenAI")
-            model_name = config.get("model", "")
-            api_key = config.get("api_key", "")
-            temperature = config.get("temperature", 0.5)
-            max_length = config.get("max_length", 200)
+        if not config:
+            return
 
-            self._client_selector.setCurrentText(client_name)
-            self._model_selector.setCurrentText(model_name)
-            self._temperature_input.setValue(temperature)
-            self._max_length_input.setValue(max_length)
+        # Set client and model
+        client_name = config.get("client", "OpenAI")
 
-            if api_key:
-                self._api_key_input.setText(self._shorten_key(api_key))
+        # Set model parameters
+        temperature = config.get("temperature", 0.5)
+        max_length = config.get("max_length", 200)
+        max_prompt_tokens = config.get("max_prompt_tokens", 500)
 
-            # Load template data
-            global_prompt = config.get("global_prompt", "")
-            field_mappings = config.get("field_mappings", "")
+        self._client_selector.setCurrentText(client_name)
+        self._temperature_input.setValue(temperature)
+        self._max_length_input.setValue(max_length)
+        self._max_prompt_tokens_input.setValue(max_prompt_tokens)
 
-            self._global_prompt_input.setText(global_prompt)
-            self._field_mappings_input.setText(field_mappings)
+        # Get API key for the current client
+        api_key = self.get_api_key_for_client(client_name)
+        if api_key:
+            self._api_key_input.setText(self._shorten_key(api_key))
 
-            # Update the prompt preview
-            self._update_prompt_preview()
+        # Get model for current client
+        client_model = self.get_model_for_client(client_name)
 
-            # Load shortcut
-            shortcut = config.get("shortcut", "Ctrl+A")
-            self._shortcut_input.setText(shortcut)
+        # Set model after API key is loaded
+        self._model_selector.setCurrentText(client_model)
+
+        # Load template data
+        global_prompt = config.get("global_prompt", "")
+        field_mappings = config.get("field_mappings", "")
+
+        self._global_prompt_input.setText(global_prompt)
+        self._field_mappings_input.setText(field_mappings)
+
+        # Update the prompt preview
+        self._update_prompt_preview()
+
+        # Load shortcut
+        shortcut = config.get("shortcut", "Ctrl+A")
+        self._shortcut_input.setText(shortcut)
 
     def _update_model_list(self):
         client_name = self._client_selector.currentText()
         client_cls = LLMClient.get_client(client_name)
-        models = client_cls.get_available_models()
-        api_key_link = client_cls.get_api_key_link()
 
+        # Get API key, handling shortened display format
+        api_key = self._api_key_input.text()
+
+        # Check if the key is already in shortened format or empty
+        if not api_key or api_key == self._shorten_key(api_key):
+            # Key is already shortened or empty, get the full key from config
+            api_key = self.get_api_key_for_client(client_name)
+
+        # Clear model selector
+        self._model_selector.clear()
+
+        try:
+            models = client_cls.get_available_models(api_key)
+            self._model_selector.addItems(models)
+
+            current_model = self.get_model_for_client(client_name)
+            # Restore previous selection if possible
+            if current_model:
+                index = self._model_selector.findText(current_model)
+                if index >= 0:
+                    self._model_selector.setCurrentIndex(index)
+        except Exception as e:
+            # If we can't get models, show a message
+            self._model_selector.clear()
+            showInfo(f"Could not get model list: {str(e)}")
+
+    def _on_client_changed(self, _):
+        """Handle client selection changes."""
+        # Get the newly selected client
+        client_name = self._client_selector.currentText()
+        client_cls = LLMClient.get_client(client_name)
+
+        # Update API key link
+        api_key_link = client_cls.get_api_key_link()
         self._api_key_link.setText(f'<a href="{api_key_link}">Get your {client_name} API key</a>')
 
-        self._model_selector.clear()
-        self._model_selector.addItems(models)
+        # Get API key for the new client
+        api_key = self.get_api_key_for_client(client_name)
+
+        # Update the API key field if we have a key for this client
+        if api_key:
+            self._api_key_input.setText(self._shorten_key(api_key))
+
+        # Update the model list for the new client
+        self._update_model_list()
+
+    def _on_api_key_changed(self, _):
+        """Handle API key changes."""
+        self._update_model_list()
 
     def _save_config(self):
         client_name = self._client_selector.currentText()
@@ -234,11 +346,28 @@ class ConfigDialog(QDialog):
         api_key = self._api_key_input.text()
         temperature = self._temperature_input.value()
         max_length = self._max_length_input.value()
+        max_prompt_tokens = self._max_prompt_tokens_input.value()
 
-        if config := mw.addonManager.getConfig(__name__):
-            current_key = config.get("api_key", "")
-            if self._shorten_key(api_key) == self._shorten_key(current_key):
-                api_key = current_key
+        # Get existing config or create a new one
+        config = mw.addonManager.getConfig(__name__) or {}
+
+        # Handle API keys
+        api_keys = config.get("api_keys", {})
+
+        # If current key input is the shortened version, get the actual key
+        if api_key and "..." in api_key:
+            # Use our helper function to get the full key
+            api_key = self.get_api_key_for_client(client_name)
+
+        # Update the API key for the current client
+        api_keys[client_name] = api_key
+
+        # Handle client-specific models
+        models = config.get("models", {})
+
+        # Save the current model for this client
+        if model_name:
+            models[client_name] = model_name
 
         global_prompt = self._global_prompt_input.toPlainText()
         field_mappings = self._field_mappings_input.toPlainText()
@@ -249,16 +378,28 @@ class ConfigDialog(QDialog):
             showInfo("Invalid shortcut. Please enter a valid shortcut.")
             return
 
-        config = {
-            "client": client_name,
-            "model": model_name,
-            "api_key": api_key,
-            "temperature": temperature,
-            "max_length": max_length,
-            "global_prompt": global_prompt,
-            "field_mappings": field_mappings,
-            "shortcut": shortcut,
-        }
+        # Update the config with all values
+        config.update(
+            {
+                "client": client_name,
+                "api_keys": api_keys,  # Store keys per client
+                "models": models,  # Store models per client
+                "temperature": temperature,
+                "max_length": max_length,
+                "max_prompt_tokens": max_prompt_tokens,
+                "global_prompt": global_prompt,
+                "field_mappings": field_mappings,
+                "shortcut": shortcut,
+            },
+        )
+
+        # Remove the legacy api_key field if it exists
+        if "api_key" in config:
+            del config["api_key"]
+
+        if "model" in config:
+            del config["model"]
+
         mw.addonManager.writeConfig(__name__, config)
         showInfo("Configuration saved!")
 
@@ -269,23 +410,130 @@ class ConfigDialog(QDialog):
 
         if not global_prompt and not field_mappings_text:
             self._preview_output.setText("")
+            self._token_count_label.setText("")
             return
 
         # Parse field mappings
         field_mappings = parse_field_mappings(field_mappings_text)
 
-        # Create a defaultdict that returns the key as its own placeholder
-        # This simulates having access to all possible fields
-        class FieldPlaceholder(defaultdict):
-            def __missing__(self, key):
-                return f"{key}"
+        # Get card fields - either from selected card or use placeholders
+        if self._selected_note:
+            # Use actual card data
+            card_fields = dict(self._selected_note.items())
+        else:
+            # Create a defaultdict that returns the key as its own placeholder
+            class FieldPlaceholder(defaultdict):
+                def __missing__(self, key):
+                    return f"{key}"
 
-        card_fields = FieldPlaceholder(str)
+            card_fields = FieldPlaceholder(str)
 
         # Use the same construct_prompt function that's used for actual LLM calls
         preview = construct_prompt(global_prompt, field_mappings, card_fields)
 
+        # Estimate token count
+        from .card_updater import estimate_token_count
+
+        estimated_tokens = estimate_token_count(preview)
+        max_tokens = self._max_prompt_tokens_input.value()
+
+        # Update token count display
+        token_info = f"Approximate token count: {estimated_tokens} "
+        if estimated_tokens > max_tokens:
+            token_info += f"(EXCEEDS LIMIT OF {max_tokens})"
+            self._token_count_label.setStyleSheet("color: red; font-weight: bold;")
+        else:
+            token_info += f"(limit: {max_tokens})"
+            self._token_count_label.setStyleSheet("color: green; font-weight: bold;")
+
+        self._token_count_label.setText(token_info)
         self._preview_output.setText(preview)
+
+    def _select_card_for_preview(self):
+        """Open a dialog to select a card for the preview."""
+        # Create and show the selection dialog
+        dialog = CardSelectDialog(self)
+
+        if dialog.exec():
+            # User selected a card and hit OK
+            note_id = dialog.get_selected_note_id()
+            if note_id:
+                self._selected_note = mw.col.get_note(note_id)
+
+                # Update the UI
+                note_type = self._selected_note.note_type()["name"]
+                first_field_content = self._selected_note.fields[0]
+
+                # Truncate content if too long
+                if len(first_field_content) > 30:
+                    first_field_content = first_field_content[:27] + "..."
+
+                self._card_info_label.setText(f"Using selected card: {note_type} - {first_field_content}")
+                self._clear_card_button.setEnabled(True)
+
+                # Update the preview with the selected card's data
+                self._update_prompt_preview()
+
+    def _clear_preview_card(self):
+        """Clear the selected card and use placeholders instead."""
+        self._selected_note = None
+        self._card_info_label.setText("Using placeholder values for preview")
+        self._clear_card_button.setEnabled(False)
+        self._update_prompt_preview()
+
+    @staticmethod
+    def get_api_key_for_client(client_name):
+        """Get the full API key for a specific client with backward compatibility.
+
+        Args:
+            client_name: The name of the client to get the API key for
+
+        Returns:
+            The full API key string or empty string if not found
+        """
+        config = mw.addonManager.getConfig(__name__) or {}
+
+        # Try to get the key from the new api_keys dictionary
+        api_keys = config.get("api_keys", {})
+
+        # Check for legacy api_key format and do migration if needed
+        if "api_key" in config and not api_keys:
+            # Migrate the old format to the new format
+            old_api_key = config.get("api_key", "")
+            if old_api_key:
+                # Get the current client from config or use the provided one
+                config_client = config.get("client", client_name)
+                api_keys[config_client] = old_api_key
+
+        # Return the API key for this client
+        return api_keys.get(client_name, "")
+
+    @staticmethod
+    def get_model_for_client(client_name):
+        """Get the model for a specific client with backward compatibility.
+
+        Args:
+            client_name: The name of the client to get the model for
+
+        Returns:
+            The model name for the client or empty string if not found
+        """
+        config = mw.addonManager.getConfig(__name__) or {}
+
+        # Try to get the model from the new models dictionary
+        models = config.get("models", {})
+
+        # Check for legacy format and do migration if needed
+        if "model" in config and not models:
+            # Migrate the old format to the new format
+            old_model = config.get("model", "")
+            if old_model:
+                # Get the current client from config or use the provided one
+                config_client = config.get("client", client_name)
+                models[config_client] = old_model
+
+        # Return the model for this client or empty string
+        return models.get(client_name, "")
 
 
 class DebugDialog(QDialog):
@@ -335,8 +583,11 @@ class DebugDialog(QDialog):
             return
 
         client_name = config.get("client", "OpenAI")
-        model_name = config.get("model", "")
-        api_key = config.get("api_key", "")
+
+        # Get the API key and model using the helper functions
+        api_key = ConfigDialog.get_api_key_for_client(client_name)
+        model_name = ConfigDialog.get_model_for_client(client_name)
+
         temperature = config.get("temperature", 0.5)
         max_length = config.get("max_length", 200)
 
@@ -348,6 +599,164 @@ class DebugDialog(QDialog):
             self._output_display.setText(response)
         except Exception as e:
             self._output_display.setText(f"Error querying API: {e}")
+
+
+class CardSelectDialog(QDialog):
+    """Dialog for selecting a card for prompt preview."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Select Card for Preview")
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(400)
+
+        layout = QVBoxLayout(self)
+
+        # Add deck selector
+        deck_layout = QHBoxLayout()
+        deck_layout.addWidget(QLabel("Deck:"))
+        self.deck_selector = QComboBox()
+        self.deck_selector.setMinimumWidth(300)
+        self.populate_deck_selector()
+        self.deck_selector.currentIndexChanged.connect(self.on_deck_changed)
+        deck_layout.addWidget(self.deck_selector)
+        layout.addLayout(deck_layout)
+
+        # Search box
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel("Search:"))
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Start typing to search...")
+        search_layout.addWidget(self.search_input)
+
+        # Create a timer for debouncing search input
+        self.search_timer = QTimer(self)
+        self.search_timer.setSingleShot(True)
+        self.search_timer.setInterval(300)  # 300ms debounce time
+        self.search_timer.timeout.connect(self.perform_search)
+
+        # Connect text changes to start the timer
+        self.search_input.textChanged.connect(self.on_search_text_changed)
+
+        layout.addLayout(search_layout)
+
+        # Results list
+        self.results_list = QListWidget()
+        self.results_list.setAlternatingRowColors(True)
+        # Enable double-click to select
+        self.results_list.itemDoubleClicked.connect(self.accept)
+        layout.addWidget(self.results_list)
+
+        # Status label
+        self.status_label = QLabel("")
+        layout.addWidget(self.status_label)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        select_button = QPushButton("Select")
+        select_button.clicked.connect(self.accept)
+        button_layout.addWidget(select_button)
+
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_button)
+
+        layout.addLayout(button_layout)
+
+        # Initialize with cards from the selected deck
+        self.perform_search()
+
+    def on_search_text_changed(self):
+        """Handle search text changes with debouncing."""
+        # Reset the timer each time the text changes
+        self.search_timer.stop()
+        self.search_timer.start()
+
+    def populate_deck_selector(self):
+        """Populate the deck selector with all available decks."""
+        self.deck_selector.clear()
+
+        # Add "All Decks" option
+        self.deck_selector.addItem("All Decks", "")
+
+        # Get all decks
+        decks = mw.col.decks.all_names_and_ids()
+        decks.sort(key=lambda x: x.name)
+
+        # Add each deck to the selector
+        for deck in decks:
+            self.deck_selector.addItem(deck.name, deck.id)
+
+    def on_deck_changed(self):
+        """Update the search when the deck selection changes."""
+        self.perform_search()
+
+    def perform_search(self):
+        """Search for cards based on the query and selected deck."""
+        # Get the base query from the search input
+        base_query = self.search_input.text().strip()
+
+        # Get the selected deck ID and name
+        deck_id = self.deck_selector.currentData()
+        deck_name = self.deck_selector.currentText()
+
+        # Build the query
+        if deck_id and deck_name != "All Decks":
+            # Use deck:DeckName format without quotes (which can cause issues)
+            query = f'"deck:{deck_name}"'
+            if base_query:
+                query += f" {base_query}"
+        else:
+            # Use the base query for all decks
+            query = base_query or "added:30"  # Default to recent cards if no query
+
+        try:
+            self.status_label.setText(f"Searching with query: {query}")
+            card_ids = mw.col.find_cards(query)
+            self.results_list.clear()
+
+            if not card_ids:
+                self.status_label.setText(f"No cards found matching your criteria. Query: {query}")
+                return
+
+            # Limit to 100 cards for performance
+            displayed_cards = card_ids[:100]
+            if len(card_ids) > 100:
+                self.status_label.setText(f"Found {len(card_ids)} cards (showing first 100)")
+            else:
+                self.status_label.setText(f"Found {len(card_ids)} cards")
+
+            # Add cards to the list
+            for card_id in displayed_cards:
+                card = mw.col.get_card(card_id)
+                note = card.note()
+                note_type = note.note_type()["name"]
+                deck_name = mw.col.decks.name(card.did)
+
+                # Get the first field content
+                first_field = note.fields[0]
+                if len(first_field) > 60:
+                    first_field = first_field[:57] + "..."
+
+                # Include deck name in the display if "All Decks" is selected
+                if not deck_id:
+                    display_text = f"{deck_name} - {note_type}: {first_field}"
+                else:
+                    display_text = f"{note_type}: {first_field}"
+
+                item = QListWidgetItem(display_text)
+                item.setData(Qt.ItemDataRole.UserRole, note.id)
+                self.results_list.addItem(item)
+
+        except Exception as e:
+            self.status_label.setText(f"Error searching: {str(e)}")
+
+    def get_selected_note_id(self):
+        """Return the ID of the selected note."""
+        current_item = self.results_list.currentItem()
+        if current_item:
+            return current_item.data(Qt.ItemDataRole.UserRole)
+        return None
 
 
 def open_config_dialog():

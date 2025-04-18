@@ -46,8 +46,16 @@ class LLMClient(ABC):
 
     @classmethod
     @abstractmethod
-    def get_available_models(cls) -> list[str]:
-        """Return a list of available models for this provider."""
+    def get_available_models(cls, api_key: str | None = None) -> list[str]:
+        """Return a list of available models for this provider.
+
+        Args:
+            api_key: Optional API key to use for fetching models
+                   If provided, may fetch up-to-date models from the API
+
+        Returns:
+            List of model names
+        """
 
     @classmethod
     @abstractmethod
@@ -71,24 +79,24 @@ class LLMClient(ABC):
 class OpenAIClient(LLMClient):
     """Client for OpenAI's API."""
 
+    # Default models if we can't fetch from API
+    _DEFAULT_MODELS = [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4-turbo",
+        "gpt-4",
+        "gpt-3.5-turbo",
+    ]
+
+    # Cache for models to avoid repeated API calls
+    _models_cache = None
+
     @classmethod
     def get_display_name(cls) -> str:
         return "OpenAI"
 
     def __init__(self, model: str, temperature: float, max_length: int, api_key: str | None = None):
         super().__init__(model, temperature, max_length, api_key)
-        self._api_url = "https://api.openai.com/v1/chat/completions"
-
-    @classmethod
-    def get_available_models(cls) -> list[str]:
-        """Return a list of available OpenAI models."""
-        return [
-            "gpt-3.5-turbo",
-            "gpt-3.5-turbo-16k",
-            "gpt-4",
-            "gpt-4-turbo",
-            "gpt-4o",
-        ]
 
     @classmethod
     def _get_api_key_from_env(cls) -> str:
@@ -98,8 +106,57 @@ class OpenAIClient(LLMClient):
             logger.warning("OpenAI API key not found in environment variable OPENAI_API_KEY")
         return api_key
 
+    @classmethod
+    def get_available_models(cls, api_key: str | None = None) -> list[str]:
+        """Return a list of available OpenAI models.
+
+        If an API key is provided, fetch models from the API,
+        otherwise return default models list.
+
+        Args:
+            api_key: Optional API key for fetching up-to-date models
+
+        Returns:
+            List of model names
+        """
+        # Return cached results if available
+        if cls._models_cache:
+            return cls._models_cache
+
+        # Try to fetch models from API if we have an API key
+        if not api_key:
+            return cls._DEFAULT_MODELS
+
+        try:
+            if models := cls._fetch_models_from_api(api_key):
+                # Cache the result
+                cls._models_cache = models
+                return models
+        except Exception as e:
+            logger.warning(f"Error fetching OpenAI models: {e}")
+            # Fall back to default models
+        return cls._DEFAULT_MODELS
+
+    @classmethod
+    def _fetch_models_from_api(cls, api_key: str) -> list[str]:
+        """Fetch available models from the OpenAI API."""
+
+        # Set up the request with authentication
+        request = urllib.request.Request("https://api.openai.com/v1/models")
+        request.add_header("Authorization", f"Bearer {api_key}")
+
+        with urllib.request.urlopen(request) as response:  # noqa: S310
+            data = json.loads(response.read().decode())
+
+        model_list = data.get("data", [])
+        models = sorted(model_list, key=lambda model: model.get("created", 0), reverse=True)
+        return [m["id"] for m in models]
+
     def __call__(self, prompt: str) -> str:
+        """Call the OpenAI API with the prompt."""
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
+
+        api_url = "https://api.openai.com/v1/chat/completions"
 
         data = json.dumps(
             {
@@ -110,7 +167,7 @@ class OpenAIClient(LLMClient):
             },
         ).encode("utf-8")
 
-        request = urllib.request.Request(self._api_url, data=data, headers=headers)  # noqa: S310
+        request = urllib.request.Request(api_url, data=data, headers=headers)  # noqa: S310
 
         # Let exceptions propagate to the caller
         with urllib.request.urlopen(request) as response:  # noqa: S310
@@ -123,7 +180,20 @@ class OpenAIClient(LLMClient):
 
 
 class AnthropicClient(LLMClient):
-    """Client for Anthropic's API."""
+    """Client for the Anthropic API."""
+
+    # Default models if we can't fetch from API
+    _DEFAULT_MODELS = [
+        "claude-3-opus-20240229",
+        "claude-3-sonnet-20240229",
+        "claude-3-haiku-20240307",
+        "claude-2.1",
+        "claude-2",
+        "claude-instant-1.2",
+    ]
+
+    # Cache for models to avoid repeated API calls
+    _models_cache = None
 
     @classmethod
     def get_display_name(cls) -> str:
@@ -134,23 +204,64 @@ class AnthropicClient(LLMClient):
         self._api_url = "https://api.anthropic.com/v1/messages"
 
     @classmethod
-    def get_available_models(cls) -> list[str]:
-        """Return a list of available Anthropic models."""
-        return [
-            "claude-3-opus-20240229",
-            "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307",
-            "claude-2.1",
-            "claude-2.0",
-        ]
-
-    @classmethod
     def _get_api_key_from_env(cls) -> str:
         """Get Anthropic API key from environment variable."""
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
             logger.warning("Anthropic API key not found in environment variable ANTHROPIC_API_KEY")
         return api_key
+
+    @classmethod
+    def get_available_models(cls, api_key: str | None = None) -> list[str]:
+        """Return a list of available Claude models.
+
+        If an API key is provided, fetch models from the API,
+        otherwise return default models list.
+
+        Args:
+            api_key: Optional API key for fetching up-to-date models
+
+        Returns:
+            List of model names
+        """
+        # Return cached results if available
+        if cls._models_cache:
+            return cls._models_cache
+
+        # Try to fetch models from API if we have an API key
+        if not api_key:
+            return cls._DEFAULT_MODELS
+
+        try:
+            if models := cls._fetch_models_from_api(api_key):
+                # Cache the result
+                cls._models_cache = models
+                return models
+        except Exception as e:
+            logger.warning(f"Error fetching Anthropic models: {e}")
+            # Fall back to default models
+        return cls._DEFAULT_MODELS
+
+    @classmethod
+    def _fetch_models_from_api(cls, api_key: str) -> list[str]:
+        """Fetch available models from the Anthropic API."""
+
+        # Set up the request with authentication
+        request = urllib.request.Request("https://api.anthropic.com/v1/models")
+        request.add_header("x-api-key", api_key)
+        request.add_header("anthropic-version", "2023-06-01")
+
+        with urllib.request.urlopen(request) as response:  # noqa: S310
+            data = json.loads(response.read().decode())
+
+        # Extract model data from response
+        model_list = data.get("data", [])
+
+        # Sort models by creation date (newest first)
+        models = sorted(model_list, key=lambda model: model.get("created_at", ""), reverse=True)
+
+        # Return just the model IDs
+        return [m["id"] for m in models]
 
     def __call__(self, prompt: str) -> str:
         headers = {"Content-Type": "application/json", "x-api-key": self.api_key, "anthropic-version": "2023-06-01"}

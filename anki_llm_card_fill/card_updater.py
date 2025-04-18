@@ -25,6 +25,16 @@ class NoteProcessSignals(QObject):
     completed = pyqtSignal(bool)  # Success status
 
 
+def estimate_token_count(text: str) -> int:
+    """Estimate the number of tokens in a text.
+
+    This is a rough approximation. A typical rule of thumb is that one token
+    is about 4 characters or 0.75 words for English text.
+    """
+    # Simple approximation - 4 characters per token on average
+    return len(text) // 4
+
+
 class NoteUpdateWorker(QRunnable):
     """Worker for updating a note with LLM content."""
 
@@ -49,6 +59,7 @@ class NoteUpdateWorker(QRunnable):
             api_key = config["api_key"]
             temperature = config["temperature"]
             max_length = config["max_length"]
+            max_prompt_tokens = config["max_prompt_tokens"]
 
             # Get template configuration
             global_prompt = config.get("global_prompt", "")
@@ -68,6 +79,16 @@ class NoteUpdateWorker(QRunnable):
 
             # Construct prompt
             prompt = construct_prompt(global_prompt, field_mappings, dict(self.note.items()))
+
+            # Check prompt length
+            estimated_tokens = estimate_token_count(prompt)
+            if estimated_tokens > max_prompt_tokens:
+                logger.error(
+                    f"Prompt exceeds maximum token limit. Estimated tokens: {estimated_tokens}, "
+                    f"Max: {max_prompt_tokens}",
+                )
+                self.signals.completed.emit(False)
+                return
 
             # Initialize LLM client
             client_cls = LLMClient.get_client(client_name)
