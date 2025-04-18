@@ -40,10 +40,15 @@ def estimate_token_count(text: str) -> int:
 class NoteUpdateWorker(QRunnable):
     """Worker for updating a note with LLM content."""
 
-    def __init__(self, note: Note, signals: NoteProcessSignals = None):
+    def __init__(self, note: Note, signals: NoteProcessSignals | None = None):
         super().__init__()
         self.note = note
         self.signals = signals or NoteProcessSignals()
+
+    def log_and_emit(self, msg: str) -> None:
+        logger.error(msg)
+        self.signals.error.emit(ValueError(msg))
+        self.signals.completed.emit(False)
 
     def run(self):
         """Perform the full note update process."""
@@ -51,8 +56,7 @@ class NoteUpdateWorker(QRunnable):
             # Get configuration
             config = mw.addonManager.getConfig(__name__)
             if not config:
-                logger.error("Configuration not found")
-                self.signals.completed.emit(False)
+                self.log_and_emit("Configuration not found, please set up plugin first")
                 return
 
             # Get LLM client configuration
@@ -68,15 +72,13 @@ class NoteUpdateWorker(QRunnable):
             field_mappings_text = config.get("field_mappings", "")
 
             if not (global_prompt and field_mappings_text):
-                logger.error("Prompt template or field mappings not configured")
-                self.signals.completed.emit(False)
+                self.log_and_emit("Prompt template or field mappings not configured")
                 return
 
             # Parse field mappings
             field_mappings = parse_field_mappings(field_mappings_text)
             if not field_mappings:
-                logger.error("No valid field mappings found")
-                self.signals.completed.emit(False)
+                self.log_and_emit("No valid field mappings found")
                 return
 
             # Construct prompt
@@ -85,11 +87,10 @@ class NoteUpdateWorker(QRunnable):
             # Check prompt length
             estimated_tokens = estimate_token_count(prompt)
             if estimated_tokens > max_prompt_tokens:
-                logger.error(
+                self.log_and_emit(
                     f"Prompt exceeds maximum token limit. Estimated tokens: {estimated_tokens}, "
                     f"Max: {max_prompt_tokens}",
                 )
-                self.signals.completed.emit(False)
                 return
 
             # Initialize LLM client
@@ -102,8 +103,7 @@ class NoteUpdateWorker(QRunnable):
             # Parse response
             field_updates = parse_llm_response(response)
             if "error" in field_updates:
-                logger.error(f"Error parsing response for note {self.note.id}: {field_updates['error']}")
-                self.signals.completed.emit(False)
+                self.log_and_emit(f"Error parsing response for note {self.note.id}: {field_updates['error']}")
                 return
 
             # Update fields
@@ -141,7 +141,11 @@ def update_note_fields(note: Note) -> bool:
         success = result
         completed = True
 
+    def on_error(error):
+        showInfo(f"Failed to update note: {error}")
+
     signals.completed.connect(on_completed)
+    signals.error.connect(on_error)
 
     # Create and start the worker directly
     worker = NoteUpdateWorker(note, signals)
@@ -224,6 +228,7 @@ def process_notes_in_parallel(notes: list[Note]) -> None:
 
     total_notes = len(notes)
     completed = 0
+    error_msgs = set()
     success_count = 0
     canceled = False
 
@@ -258,7 +263,16 @@ def process_notes_in_parallel(notes: list[Note]) -> None:
                 tooltip(f"Updated {success_count} of {total_notes} notes. Check logs for errors.")
             progress.close()
 
+    def on_note_error(error):
+        nonlocal error_msgs
+        msg = str(error)
+        if msg in error_msgs:
+            return
+        error_msgs.add(msg)
+        showInfo(f"Got an error when processing note: {msg}")
+
     signals.completed.connect(on_note_completed)
+    signals.error.connect(on_note_error)
 
     # Handle cancellation
     def on_canceled():

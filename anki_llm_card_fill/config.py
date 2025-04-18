@@ -1,3 +1,5 @@
+import socket
+import threading
 from collections import defaultdict
 
 from aqt import mw
@@ -11,12 +13,16 @@ from aqt.qt import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QObject,
     QPushButton,
+    QRunnable,
     QSpinBox,
     QTabWidget,
     QTextEdit,
+    QThreadPool,
     QVBoxLayout,
     QWidget,
+    pyqtSignal,
 )
 from aqt.utils import showInfo
 from PyQt6.QtCore import Qt, QTimer
@@ -27,6 +33,9 @@ from .utils import construct_prompt, parse_field_mappings
 
 
 class ConfigDialog(QDialog):
+    # Class-level lock to prevent multiple model update operations
+    _model_update_lock = threading.Lock()
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Configure LLM Card Fill")
@@ -58,7 +67,6 @@ class ConfigDialog(QDialog):
         self.setLayout(self._layout)
 
         # Update model list first, then load config to preserve selected model
-        self._update_model_list()
         self._load_existing_config()
 
     def _setup_general_tab(self):
@@ -236,6 +244,8 @@ class ConfigDialog(QDialog):
         self._selected_note = None
 
     def _open_debug_dialog(self):
+        """Open the debug dialog with the current preview text."""
+        # Pass this instance as parent and the preview text as initial_prompt
         dialog = DebugDialog(self, initial_prompt=self._preview_output.toPlainText())
         dialog.exec()
 
@@ -287,34 +297,87 @@ class ConfigDialog(QDialog):
         self._shortcut_input.setText(shortcut)
 
     def _update_model_list(self):
-        client_name = self._client_selector.currentText()
-        client_cls = LLMClient.get_client(client_name)
-
-        # Get API key, handling shortened display format
-        api_key = self._api_key_input.text()
-
-        # Check if the key is already in shortened format or empty
-        if not api_key or api_key == self._shorten_key(api_key):
-            # Key is already shortened or empty, get the full key from config
-            api_key = self.get_api_key_for_client(client_name)
-
-        # Clear model selector
-        self._model_selector.clear()
+        """Update the model list for the current client."""
 
         try:
-            models = client_cls.get_available_models(api_key)
-            self._model_selector.addItems(models)
+            client_name = self._client_selector.currentText()
+            client_cls = LLMClient.get_client(client_name)
 
-            current_model = self.get_model_for_client(client_name)
-            # Restore previous selection if possible
-            if current_model:
-                index = self._model_selector.findText(current_model)
-                if index >= 0:
-                    self._model_selector.setCurrentIndex(index)
-        except Exception as e:
-            # If we can't get models, show a message
+            # Get API key, handling shortened display format
+            api_key = self._api_key_input.text()
+
+            # Check if the key is already in shortened format or empty
+            if not api_key or api_key == self._shorten_key(api_key):
+                # Key is already shortened or empty, get the full key from config
+                api_key = self.get_api_key_for_client(client_name)
+
+            # Show loading state
             self._model_selector.clear()
-            showInfo(f"Could not get model list: {str(e)}")
+
+            if not api_key:
+                # No API key provided - show a message
+                self._model_selector.addItem(f"Enter {client_name} API key to see models")
+                self._model_selector.setEnabled(False)
+                return
+
+            # API key provided - try to fetch models
+            self._model_selector.addItem("Loading models...")
+            self._model_selector.setEnabled(False)
+            # Check if we're already updating models
+            if not ConfigDialog._model_update_lock.acquire(blocking=False):
+                # Another thread is already updating models, so we'll just return
+                return
+
+            # Create and start worker
+            worker = ModelFetchWorker(client_name, client_cls, api_key)
+            worker.signals.result.connect(self._on_models_loaded)
+            worker.signals.error.connect(self._on_models_error)
+            worker.signals.finished.connect(lambda: ConfigDialog._model_update_lock.release())
+
+            # Start the worker
+            QThreadPool.globalInstance().start(worker)
+        except Exception:
+            # Ensure the lock is released even if there's an error
+            ConfigDialog._model_update_lock.release()
+            raise
+
+    def _on_models_loaded(self, models):
+        """Handle successfully loaded models."""
+        self._model_selector.clear()
+        self._model_selector.setEnabled(True)
+
+        if not models:
+            self._model_selector.addItem("No models available")
+            return
+
+        self._model_selector.addItems(models)
+
+        # Restore previous selection if possible
+        client_name = self._client_selector.currentText()
+        previous_model = self.get_model_for_client(client_name)
+
+        if previous_model:
+            index = self._model_selector.findText(previous_model)
+            if index >= 0:
+                self._model_selector.setCurrentIndex(index)
+
+    def _on_models_error(self, error_msg):
+        """Handle errors during model loading."""
+        self._model_selector.clear()
+        self._model_selector.addItem("Error loading models")
+        self._model_selector.setEnabled(False)  # Disable the model selector
+
+        # Also show an info popup with more details
+        client_name = self._client_selector.currentText()
+        error_message = (
+            f"Could not get model list for {client_name}:\n\n"
+            f"{error_msg}\n\n"
+            "Please check:\n"
+            "- Your API key is correct\n"
+            "- Your internet connection is working\n"
+            "- The API service is available"
+        )
+        showInfo(error_message)
 
     def _on_client_changed(self, _):
         """Handle client selection changes."""
@@ -537,17 +600,18 @@ class ConfigDialog(QDialog):
 
 
 class DebugDialog(QDialog):
-    def __init__(self, parent=None, initial_prompt=""):
+    """Dialog for testing API calls."""
+
+    def __init__(self, parent=None, initial_prompt=None):
         super().__init__(parent)
-        self.setWindowTitle("Debug API Query")
+        self.setWindowTitle("LLM API Debug")
         self._layout = QVBoxLayout()
 
-        # Set a reasonable size for the debug dialog
+        # Set size
         self.setMinimumWidth(600)
         self.setMinimumHeight(500)
 
-        # Use QTextEdit instead of QLineEdit for multi-line prompt input
-        self._prompt_label = QLabel("Enter your prompt:")
+        self._prompt_label = QLabel("Enter prompt:")
         self._layout.addWidget(self._prompt_label)
 
         self._prompt_input = QTextEdit()
@@ -571,11 +635,21 @@ class DebugDialog(QDialog):
         self._query_button.clicked.connect(self._query_api)
         self._layout.addWidget(self._query_button)
 
+        # Add status label
+        self._status_label = QLabel("")
+        self._layout.addWidget(self._status_label)
+
         self.setLayout(self._layout)
 
+        # Create thread pool for worker
+        self._thread_pool = QThreadPool()
+
     def _query_api(self):
-        # Get the prompt from the QTextEdit instead of QLineEdit
+        # Get the prompt from the QTextEdit
         prompt = self._prompt_input.toPlainText()
+        if not prompt.strip():
+            self._output_display.setText("Please enter a prompt.")
+            return
 
         config = mw.addonManager.getConfig(__name__)
         if not config:
@@ -591,14 +665,70 @@ class DebugDialog(QDialog):
         temperature = config.get("temperature", 0.5)
         max_length = config.get("max_length", 200)
 
-        client_cls = LLMClient.get_client(client_name)
-        client = client_cls(api_key=api_key, model=model_name, temperature=temperature, max_length=max_length)
+        # Disable the query button and update status
+        self._query_button.setEnabled(False)
+        self._status_label.setText("Querying API...")
+        self._output_display.setText("Waiting for response...")
 
+        # Create worker
+        worker = DebugLLMWorker(client_name, api_key, model_name, temperature, max_length, prompt)
+
+        # Connect signals
+        worker.signals.result.connect(self._handle_response)
+        worker.signals.error.connect(self._handle_error)
+        worker.signals.finished.connect(lambda: self._query_button.setEnabled(True))
+
+        # Start the worker
+        self._thread_pool.start(worker)
+
+    def _handle_response(self, response):
+        """Handle the API response."""
+        self._output_display.setText(response)
+        self._status_label.setText("Response received.")
+
+    def _handle_error(self, error_msg):
+        """Handle API errors."""
+        self._output_display.setText(f"Error querying API: {error_msg}")
+        self._status_label.setText("Error occurred.")
+
+
+class DebugWorkerSignals(QObject):
+    """Signals for the debug worker."""
+
+    result = pyqtSignal(str)
+    error = pyqtSignal(str)
+    finished = pyqtSignal()
+
+
+class DebugLLMWorker(QRunnable):
+    """Worker for making LLM API calls in the debug dialog."""
+
+    def __init__(self, client_name, api_key, model_name, temperature, max_length, prompt):
+        super().__init__()
+        self.client_name = client_name
+        self.api_key = api_key
+        self.model_name = model_name
+        self.temperature = temperature
+        self.max_length = max_length
+        self.prompt = prompt
+        self.signals = DebugWorkerSignals()
+
+    def run(self):
         try:
-            response = client(prompt)
-            self._output_display.setText(response)
+            client_cls = LLMClient.get_client(self.client_name)
+            client = client_cls(
+                api_key=self.api_key,
+                model=self.model_name,
+                temperature=self.temperature,
+                max_length=self.max_length,
+            )
+
+            response = client(self.prompt)
+            self.signals.result.emit(response)
         except Exception as e:
-            self._output_display.setText(f"Error querying API: {e}")
+            self.signals.error.emit(str(e))
+        finally:
+            self.signals.finished.emit()
 
 
 class CardSelectDialog(QDialog):
@@ -762,3 +892,37 @@ class CardSelectDialog(QDialog):
 def open_config_dialog():
     dialog = ConfigDialog()
     dialog.exec()
+
+
+class ModelFetchWorkerSignals(QObject):
+    """Signals for the model fetching worker."""
+
+    result = pyqtSignal(list)
+    error = pyqtSignal(str)
+    finished = pyqtSignal()
+
+
+class ModelFetchWorker(QRunnable):
+    """Worker for fetching model list from API."""
+
+    def __init__(self, client_name, client_cls, api_key):
+        super().__init__()
+        self.client_name = client_name
+        self.client_cls = client_cls
+        self.api_key = api_key
+        self.signals = ModelFetchWorkerSignals()
+
+    def run(self):
+        # Set up a timeout for network operations
+        original_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(5.0)  # 5 second timeout
+
+        try:
+            models = self.client_cls.get_available_models(self.api_key)
+            self.signals.result.emit(models)
+        except Exception as e:
+            self.signals.error.emit(str(e))
+        finally:
+            # Restore original timeout
+            socket.setdefaulttimeout(original_timeout)
+            self.signals.finished.emit()

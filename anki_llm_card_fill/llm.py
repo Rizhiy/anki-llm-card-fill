@@ -15,6 +15,7 @@ class LLMClient(ABC):
     """Base class for LLM clients."""
 
     _registry = {}
+    _models_cache = None
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -46,12 +47,11 @@ class LLMClient(ABC):
 
     @classmethod
     @abstractmethod
-    def get_available_models(cls, api_key: str | None = None) -> list[str]:
+    def get_available_models(cls, api_key: str) -> list[str]:
         """Return a list of available models for this provider.
 
         Args:
-            api_key: Optional API key to use for fetching models
-                   If provided, may fetch up-to-date models from the API
+            api_key: API key to use for fetching models from the API
 
         Returns:
             List of model names
@@ -79,18 +79,6 @@ class LLMClient(ABC):
 class OpenAIClient(LLMClient):
     """Client for OpenAI's API."""
 
-    # Default models if we can't fetch from API
-    _DEFAULT_MODELS = [
-        "gpt-4o",
-        "gpt-4o-mini",
-        "gpt-4-turbo",
-        "gpt-4",
-        "gpt-3.5-turbo",
-    ]
-
-    # Cache for models to avoid repeated API calls
-    _models_cache = None
-
     @classmethod
     def get_display_name(cls) -> str:
         return "OpenAI"
@@ -107,35 +95,23 @@ class OpenAIClient(LLMClient):
         return api_key
 
     @classmethod
-    def get_available_models(cls, api_key: str | None = None) -> list[str]:
+    def get_available_models(cls, api_key: str) -> list[str]:
         """Return a list of available OpenAI models.
 
-        If an API key is provided, fetch models from the API,
-        otherwise return default models list.
-
         Args:
-            api_key: Optional API key for fetching up-to-date models
+            api_key: API key for fetching up-to-date models
 
         Returns:
-            List of model names
+            List of model names or empty list if fetch fails
         """
         # Return cached results if available
         if cls._models_cache:
             return cls._models_cache
 
-        # Try to fetch models from API if we have an API key
-        if not api_key:
-            return cls._DEFAULT_MODELS
-
-        try:
-            if models := cls._fetch_models_from_api(api_key):
-                # Cache the result
-                cls._models_cache = models
-                return models
-        except Exception as e:
-            logger.warning(f"Error fetching OpenAI models: {e}")
-            # Fall back to default models
-        return cls._DEFAULT_MODELS
+        models = cls._fetch_models_from_api(api_key)
+        # Cache the result
+        cls._models_cache = models
+        return models
 
     @classmethod
     def _fetch_models_from_api(cls, api_key: str) -> list[str]:
@@ -182,19 +158,6 @@ class OpenAIClient(LLMClient):
 class AnthropicClient(LLMClient):
     """Client for the Anthropic API."""
 
-    # Default models if we can't fetch from API
-    _DEFAULT_MODELS = [
-        "claude-3-opus-20240229",
-        "claude-3-sonnet-20240229",
-        "claude-3-haiku-20240307",
-        "claude-2.1",
-        "claude-2",
-        "claude-instant-1.2",
-    ]
-
-    # Cache for models to avoid repeated API calls
-    _models_cache = None
-
     @classmethod
     def get_display_name(cls) -> str:
         return "Anthropic"
@@ -212,35 +175,23 @@ class AnthropicClient(LLMClient):
         return api_key
 
     @classmethod
-    def get_available_models(cls, api_key: str | None = None) -> list[str]:
+    def get_available_models(cls, api_key: str) -> list[str]:
         """Return a list of available Claude models.
 
-        If an API key is provided, fetch models from the API,
-        otherwise return default models list.
-
         Args:
-            api_key: Optional API key for fetching up-to-date models
+            api_key: API key for fetching up-to-date models
 
         Returns:
-            List of model names
+            List of model names or empty list if fetch fails
         """
         # Return cached results if available
         if cls._models_cache:
             return cls._models_cache
 
-        # Try to fetch models from API if we have an API key
-        if not api_key:
-            return cls._DEFAULT_MODELS
-
-        try:
-            if models := cls._fetch_models_from_api(api_key):
-                # Cache the result
-                cls._models_cache = models
-                return models
-        except Exception as e:
-            logger.warning(f"Error fetching Anthropic models: {e}")
-            # Fall back to default models
-        return cls._DEFAULT_MODELS
+        models = cls._fetch_models_from_api(api_key)
+        # Cache the result
+        cls._models_cache = models
+        return models
 
     @classmethod
     def _fetch_models_from_api(cls, api_key: str) -> list[str]:
