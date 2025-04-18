@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.5.2 (2025-04-18)
+
+### Bug Fixes
+
+- Handle network errors when updating cards
+  ([`7afea88`](https://github.com/Rizhiy/anki-llm-card-fill/commit/7afea88828d613a411273a294f5c6536c3c77de1))
+
+
 ## v0.5.1 (2025-04-18)
 
 ### Bug Fixes
