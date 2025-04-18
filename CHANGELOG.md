@@ -1,7 +1,19 @@
 # CHANGELOG
 
 
-## v0.4.0 (2025-04-17)
+## v0.5.0 (2025-04-18)
+
+### Features
+
+- Various QoL changes
+  ([`dc85bde`](https://github.com/Rizhiy/anki-llm-card-fill/commit/dc85bde8f5e5a504da27c722f9331e84612fec0b))
+
+* Allow to set maximum prompt length, to prevent accidental expensive calls * Allow to preview
+  actual prompt for specified card * Add basic HTML to Markdown conversion * Remember api key and
+  selected mode for each client separately * Retrieve full list of models from API for each client
+
+
+## v0.4.0 (2025-04-18)
 
 ### Features
 
@@ -9,12 +21,12 @@
   ([`2d3d208`](https://github.com/Rizhiy/anki-llm-card-fill/commit/2d3d208056910b03df1c72cc20e45de930902cca))
 
 - Allow updating multiple cards at once from browser
-  ([`5df4fac`](https://github.com/Rizhiy/anki-llm-card-fill/commit/5df4facbf485f2a8cb562873c7b04f66815c2384))
+  ([`93a5e12`](https://github.com/Rizhiy/anki-llm-card-fill/commit/93a5e124d8fbd5eb234c02c65f11de7955bf6994))
 
 ### Performance Improvements
 
 - Make all calls in separate thread to not block the UI
-  ([`3999b32`](https://github.com/Rizhiy/anki-llm-card-fill/commit/3999b3287a114c481593847578289b0c5f57f66f))
+  ([`3790f4c`](https://github.com/Rizhiy/anki-llm-card-fill/commit/3790f4cac0834a42b6a009e710c5cba0c67fabc2))
 
 
 ## v0.3.0 (2025-03-03)
