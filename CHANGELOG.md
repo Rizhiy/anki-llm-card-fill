@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.5.1 (2025-04-18)
+
+### Bug Fixes
+
+- Fix calling of the actual api
+  ([`071c7ac`](https://github.com/Rizhiy/anki-llm-card-fill/commit/071c7ac51a7d273afe6a160001486bc40d292853))
+
+
 ## v0.5.0 (2025-04-18)
 
 ### Features
