@@ -35,6 +35,9 @@ Example prompt I use for generating Japanese sentences:
 After saving the configuration, you can use the shortcut (Ctrl+A by default) or option in the submenu to update the card once it comes up for review.
 You can also update the note from editor window using the "LLM" button or update multiple notes at once using the right-click menu.
 
+To debug your prompt you can select an example card to see what exactly will be sent to the LLM.
+You can also make the request and see response using Debug Dialog.
+
 ## Development
 
 Create a virtual environment with your preferred method.
