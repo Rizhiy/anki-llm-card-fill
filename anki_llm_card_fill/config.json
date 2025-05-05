@@ -1,10 +1,12 @@
 {
     "client": "OpenAI",
-    "model": "gpt-4o",
     "temperature": 0.7,
     "max_length": 250,
+    "max_prompt_tokens": 500,
     "shortcut": "Ctrl+A",
     "timeout": 5,
     "api_keys": {},
-    "models": {}
+    "models": {
+        "OpenAI": "gpt-4.1"
+    }
 }
