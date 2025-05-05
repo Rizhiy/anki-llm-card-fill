@@ -4,6 +4,7 @@ from aqt.qt import QAction, QMenu, qconnect
 
 from .card_updater import update_browser_notes, update_editor_note, update_reviewer_card
 from .config import open_config_dialog
+from .config_manager import config_manager
 
 submenu = QMenu("LLM Card Fill", mw)
 
@@ -14,8 +15,8 @@ submenu.addAction(config_action)
 
 # Action + Shortcut for reviewer
 shortcut = "Ctrl+A"  # Default shortcut
-if config := mw.addonManager.getConfig(__name__):
-    shortcut = config.get("shortcut") or shortcut
+if config_manager:
+    shortcut = config_manager["shortcut"]
 update_action = QAction("Update Card with LLM", mw)
 update_action.setShortcut(QKeySequence(shortcut))
 qconnect(update_action.triggered, update_reviewer_card)

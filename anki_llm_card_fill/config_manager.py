@@ -21,7 +21,10 @@ class ConfigManager(UserDict):
         self.load_config()
 
     def load_config(self) -> dict[str, Any]:
-        """Load configuration from Anki's addon manager."""
+        """Load configuration from Anki's addon manager.
+
+        :return: The current configuration dictionary
+        """
         config = mw.addonManager.getConfig(__name__) or {}
 
         self._backup_config = copy.deepcopy(config)
@@ -38,7 +41,11 @@ class ConfigManager(UserDict):
             mw.addonManager.writeConfig(__name__, self.data)
 
     def _detect_schema_version(self) -> int:
-        """Detect the schema version of the current configuration."""
+        """Detect the schema version of the current configuration.
+
+        :return: The detected schema version
+        :raises ValueError: If the version cannot be determined
+        """
         if "schema_version" in self.data:
             return self.data["schema_version"]
 
@@ -52,7 +59,10 @@ class ConfigManager(UserDict):
         raise ValueError("Unknown config version")
 
     def _migrate_config(self) -> None:
-        """Migrate configuration to the current schema version."""
+        """Migrate configuration to the current schema version.
+
+        :raises ValueError: If no configuration is found
+        """
         if not self.data:
             raise ValueError("No configuration found")
 
@@ -72,6 +82,40 @@ class ConfigManager(UserDict):
             logger.info(f"Successfully migrated from v{schema_version} to v{schema_version + 1}")
 
             schema_version += 1
+
+    def get_api_key_for_client(self, client_name):
+        """Get the API key for a specific client.
+
+        :param client_name: The name of the client to get the API key for
+        :return: The API key string or empty string if not found
+        """
+        return self["api_keys"].get(client_name, "")
+
+    def get_model_for_client(self, client_name):
+        """Get the model for a specific client.
+
+        :param client_name: The name of the client to get the model for
+        :return: The model name for the client or empty string if not found
+        """
+        return self["models"].get(client_name, "")
+
+    def validate_settings(self) -> None:
+        """Validate that required settings have been configured by the user.
+
+        :raises ValueError: If any required settings are missing, with a message
+                          describing what's missing
+        """
+        # Check required client settings
+        client_name = self["client"]
+        if not self["api_keys"].get(client_name, ""):
+            raise ValueError(f"API key for {client_name} not configured")
+
+        # Check template settings
+        if not self.get("global_prompt", ""):
+            raise ValueError("Prompt template not configured")
+
+        if not self.get("field_mappings", ""):
+            raise ValueError("Field mappings not configured")
 
 
 config_manager = ConfigManager()

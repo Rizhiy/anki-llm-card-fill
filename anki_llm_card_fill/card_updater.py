@@ -7,8 +7,7 @@ from aqt import mw
 from aqt.qt import QApplication, QMessageBox, QObject, QProgressDialog, QRunnable, Qt, QThreadPool, pyqtSignal
 from aqt.utils import showInfo, tooltip
 
-from anki_llm_card_fill.config import ConfigDialog
-
+from .config_manager import config_manager
 from .llm import LLMClient
 from .utils import construct_prompt, parse_field_mappings, parse_llm_response
 
@@ -32,6 +31,9 @@ def estimate_token_count(text: str) -> int:
 
     This is a rough approximation. A typical rule of thumb is that one token
     is about 4 characters or 0.75 words for English text.
+
+    :param text: The text to estimate token count for
+    :return: Estimated number of tokens
     """
     # Simple approximation - 4 characters per token on average
     return len(text) // 4
@@ -46,6 +48,10 @@ class NoteUpdateWorker(QRunnable):
         self.signals = signals or NoteProcessSignals()
 
     def log_and_emit(self, msg: str) -> None:
+        """Log an error message and emit error signals.
+
+        :param msg: The error message
+        """
         logger.error(msg)
         self.signals.error.emit(ValueError(msg))
         self.signals.completed.emit(False)
@@ -53,27 +59,24 @@ class NoteUpdateWorker(QRunnable):
     def run(self):
         """Perform the full note update process."""
         try:
-            # Get configuration
-            config = mw.addonManager.getConfig(__name__)
-            if not config:
-                self.log_and_emit("Configuration not found, please set up plugin first")
+            # Validate configuration
+            try:
+                config_manager.validate_settings()
+            except ValueError as e:
+                self.log_and_emit(str(e))
                 return
 
             # Get LLM client configuration
-            client_name = config["client"]
-            model_name = ConfigDialog.get_model_for_client(client_name)
-            api_key = ConfigDialog.get_api_key_for_client(client_name)
-            temperature = config["temperature"]
-            max_length = config["max_length"]
-            max_prompt_tokens = config["max_prompt_tokens"]
+            client_name = config_manager["client"]
+            model_name = config_manager.get_model_for_client(client_name)
+            api_key = config_manager.get_api_key_for_client(client_name)
+            temperature = config_manager["temperature"]
+            max_length = config_manager["max_length"]
+            max_prompt_tokens = config_manager["max_prompt_tokens"]
 
             # Get template configuration
-            global_prompt = config.get("global_prompt", "")
-            field_mappings_text = config.get("field_mappings", "")
-
-            if not (global_prompt and field_mappings_text):
-                self.log_and_emit("Prompt template or field mappings not configured")
-                return
+            global_prompt = config_manager.get("global_prompt", "")
+            field_mappings_text = config_manager.get("field_mappings", "")
 
             # Parse field mappings
             field_mappings = parse_field_mappings(field_mappings_text)

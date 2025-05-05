@@ -28,6 +28,7 @@ from aqt.utils import showInfo
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QKeySequence
 
+from .config_manager import config_manager
 from .llm import LLMClient
 from .utils import construct_prompt, parse_field_mappings
 
@@ -254,17 +255,17 @@ class ConfigDialog(QDialog):
         return f"{key[:3]}...{key[-3:]}"
 
     def _load_existing_config(self):
-        config = mw.addonManager.getConfig(__name__)
-        if not config:
+        # Use config_manager directly as a dictionary
+        if not config_manager:
             return
 
         # Set client and model
-        client_name = config.get("client", "OpenAI")
+        client_name = config_manager["client"]
 
         # Set model parameters
-        temperature = config.get("temperature", 0.5)
-        max_length = config.get("max_length", 200)
-        max_prompt_tokens = config.get("max_prompt_tokens", 500)
+        temperature = config_manager["temperature"]
+        max_length = config_manager["max_length"]
+        max_prompt_tokens = config_manager["max_prompt_tokens"]
 
         self._client_selector.setCurrentText(client_name)
         self._temperature_input.setValue(temperature)
@@ -272,19 +273,19 @@ class ConfigDialog(QDialog):
         self._max_prompt_tokens_input.setValue(max_prompt_tokens)
 
         # Get API key for the current client
-        api_key = self.get_api_key_for_client(client_name)
+        api_key = config_manager.get_api_key_for_client(client_name)
         if api_key:
             self._api_key_input.setText(self._shorten_key(api_key))
 
         # Get model for current client
-        client_model = self.get_model_for_client(client_name)
+        client_model = config_manager.get_model_for_client(client_name)
 
         # Set model after API key is loaded
         self._model_selector.setCurrentText(client_model)
 
         # Load template data
-        global_prompt = config.get("global_prompt", "")
-        field_mappings = config.get("field_mappings", "")
+        global_prompt = config_manager.get("global_prompt", "")
+        field_mappings = config_manager.get("field_mappings", "")
 
         self._global_prompt_input.setText(global_prompt)
         self._field_mappings_input.setText(field_mappings)
@@ -293,7 +294,7 @@ class ConfigDialog(QDialog):
         self._update_prompt_preview()
 
         # Load shortcut
-        shortcut = config.get("shortcut", "Ctrl+A")
+        shortcut = config_manager["shortcut"]
         self._shortcut_input.setText(shortcut)
 
     def _update_model_list(self):
@@ -309,7 +310,7 @@ class ConfigDialog(QDialog):
             # Check if the key is already in shortened format or empty
             if not api_key or api_key == self._shorten_key(api_key):
                 # Key is already shortened or empty, get the full key from config
-                api_key = self.get_api_key_for_client(client_name)
+                api_key = config_manager.get_api_key_for_client(client_name)
 
             # Show loading state
             self._model_selector.clear()
@@ -354,7 +355,7 @@ class ConfigDialog(QDialog):
 
         # Restore previous selection if possible
         client_name = self._client_selector.currentText()
-        previous_model = self.get_model_for_client(client_name)
+        previous_model = config_manager.get_model_for_client(client_name)
 
         if previous_model:
             index = self._model_selector.findText(previous_model)
@@ -390,7 +391,7 @@ class ConfigDialog(QDialog):
         self._api_key_link.setText(f'<a href="{api_key_link}">Get your {client_name} API key</a>')
 
         # Get API key for the new client
-        api_key = self.get_api_key_for_client(client_name)
+        api_key = config_manager.get_api_key_for_client(client_name)
 
         # Update the API key field if we have a key for this client
         if api_key:
@@ -411,22 +412,17 @@ class ConfigDialog(QDialog):
         max_length = self._max_length_input.value()
         max_prompt_tokens = self._max_prompt_tokens_input.value()
 
-        # Get existing config or create a new one
-        config = mw.addonManager.getConfig(__name__) or {}
-
-        # Handle API keys
-        api_keys = config.get("api_keys", {})
+        # Keep using .get() for user collections
+        api_keys = config_manager.get("api_keys", {})
+        models = config_manager.get("models", {})
 
         # If current key input is the shortened version, get the actual key
         if api_key and "..." in api_key:
-            # Use our helper function to get the full key
-            api_key = self.get_api_key_for_client(client_name)
+            # Use config_manager's method to get the full key
+            api_key = config_manager.get_api_key_for_client(client_name)
 
         # Update the API key for the current client
         api_keys[client_name] = api_key
-
-        # Handle client-specific models
-        models = config.get("models", {})
 
         # Save the current model for this client
         if model_name:
@@ -442,7 +438,7 @@ class ConfigDialog(QDialog):
             return
 
         # Update the config with all values
-        config.update(
+        config_manager.update(
             {
                 "client": client_name,
                 "api_keys": api_keys,  # Store keys per client
@@ -456,14 +452,8 @@ class ConfigDialog(QDialog):
             },
         )
 
-        # Remove the legacy api_key field if it exists
-        if "api_key" in config:
-            del config["api_key"]
-
-        if "model" in config:
-            del config["model"]
-
-        mw.addonManager.writeConfig(__name__, config)
+        # Save the updated configuration using the config manager
+        config_manager.save_config()
         showInfo("Configuration saved!")
 
     def _update_prompt_preview(self):
@@ -544,60 +534,6 @@ class ConfigDialog(QDialog):
         self._clear_card_button.setEnabled(False)
         self._update_prompt_preview()
 
-    @staticmethod
-    def get_api_key_for_client(client_name):
-        """Get the full API key for a specific client with backward compatibility.
-
-        Args:
-            client_name: The name of the client to get the API key for
-
-        Returns:
-            The full API key string or empty string if not found
-        """
-        config = mw.addonManager.getConfig(__name__) or {}
-
-        # Try to get the key from the new api_keys dictionary
-        api_keys = config.get("api_keys", {})
-
-        # Check for legacy api_key format and do migration if needed
-        if "api_key" in config and not api_keys:
-            # Migrate the old format to the new format
-            old_api_key = config.get("api_key", "")
-            if old_api_key:
-                # Get the current client from config or use the provided one
-                config_client = config.get("client", client_name)
-                api_keys[config_client] = old_api_key
-
-        # Return the API key for this client
-        return api_keys.get(client_name, "")
-
-    @staticmethod
-    def get_model_for_client(client_name):
-        """Get the model for a specific client with backward compatibility.
-
-        Args:
-            client_name: The name of the client to get the model for
-
-        Returns:
-            The model name for the client or empty string if not found
-        """
-        config = mw.addonManager.getConfig(__name__) or {}
-
-        # Try to get the model from the new models dictionary
-        models = config.get("models", {})
-
-        # Check for legacy format and do migration if needed
-        if "model" in config and not models:
-            # Migrate the old format to the new format
-            old_model = config.get("model", "")
-            if old_model:
-                # Get the current client from config or use the provided one
-                config_client = config.get("client", client_name)
-                models[config_client] = old_model
-
-        # Return the model for this client or empty string
-        return models.get(client_name, "")
-
 
 class DebugDialog(QDialog):
     """Dialog for testing API calls."""
@@ -651,19 +587,18 @@ class DebugDialog(QDialog):
             self._output_display.setText("Please enter a prompt.")
             return
 
-        config = mw.addonManager.getConfig(__name__)
-        if not config:
+        if not config_manager:
             self._output_display.setText("No configuration found.")
             return
 
-        client_name = config.get("client", "OpenAI")
+        client_name = config_manager["client"]
 
-        # Get the API key and model using the helper functions
-        api_key = ConfigDialog.get_api_key_for_client(client_name)
-        model_name = ConfigDialog.get_model_for_client(client_name)
+        # Get the API key and model using config_manager methods
+        api_key = config_manager.get_api_key_for_client(client_name)
+        model_name = config_manager.get_model_for_client(client_name)
 
-        temperature = config.get("temperature", 0.5)
-        max_length = config.get("max_length", 200)
+        temperature = config_manager["temperature"]
+        max_length = config_manager["max_length"]
 
         # Disable the query button and update status
         self._query_button.setEnabled(False)
