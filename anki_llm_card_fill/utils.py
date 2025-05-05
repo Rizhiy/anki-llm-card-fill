@@ -2,27 +2,9 @@ import json
 import re
 from typing import Mapping
 
+from aqt.qt import QLineEdit
+
 from .html_to_markdown import html_to_markdown
-
-
-def parse_field_mappings(field_mappings_text: str) -> dict[str, str]:
-    """Parse the field mappings text into a dictionary."""
-    result = {}
-    if not field_mappings_text.strip():
-        return result
-
-    # Split by lines and filter empty lines
-    lines = [line.strip() for line in field_mappings_text.split("\n") if line.strip()]
-
-    for line in lines:
-        # Find the first colon that separates field name from description
-        parts = line.split(":", 1)
-        if len(parts) == 2:
-            field_name = parts[0].strip()
-            field_description = parts[1].strip()
-            result[field_name] = field_description
-
-    return result
 
 
 def construct_prompt(template: str, field_mappings: dict[str, str], card_fields: Mapping[str, str]) -> str:
@@ -67,3 +49,12 @@ def parse_llm_response(response: str) -> dict[str, str]:
             return {"error": f"Failed to parse JSON from response:\n{response}"}
 
     return {"error": "No JSON found in response"}
+
+
+# Source: https://stackoverflow.com/a/47307180/2059584
+def set_line_edit_min_width(e: QLineEdit) -> None:
+    fm = e.fontMetrics()
+    m = e.textMargins()
+    c = e.contentsMargins()
+    w = fm.horizontalAdvance(e.text()) + m.left() + m.right() + c.left() + c.right()
+    e.setMinimumWidth(w + 8)

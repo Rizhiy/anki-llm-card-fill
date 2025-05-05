@@ -62,14 +62,37 @@ def v3(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-# List of all migrations in order
-# Migration at index i converts from version i to version i+1
-MIGRATIONS: list[MigrationFunction] = [
-    v1,
-    v2,
-    v3,
-    # Add new migrations here as they are created
-]
+def v4(config: dict[str, Any]) -> dict[str, Any]:
+    """Convert field_mappings from string to dictionary format."""
 
-# Current schema version - should match the latest migration's target
-CURRENT_SCHEMA_VERSION = 3
+    # Get the existing field_mappings string
+    field_mappings_str = config.get("field_mappings", "")
+
+    # Convert to dictionary
+    field_mappings_dict = {}
+    if isinstance(field_mappings_str, str) and field_mappings_str:
+        # Split by lines and parse each line
+        for line in field_mappings_str.strip().split("\n"):
+            if ":" in line:
+                prompt_var, note_field = [x.strip() for x in line.split(":", 1)]
+                field_mappings_dict[prompt_var] = note_field
+
+    # Update the config with the new dictionary
+    config["field_mappings"] = field_mappings_dict
+
+    # Update schema version
+    config["schema_version"] = 4
+
+    return config
+
+
+# Mapping of version numbers to migration functions
+MIGRATIONS = {
+    0: v1,
+    1: v2,
+    2: v3,
+    3: v4,
+}
+
+# Current schema version
+CURRENT_SCHEMA_VERSION = 4

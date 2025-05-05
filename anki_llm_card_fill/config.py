@@ -14,11 +14,12 @@ from aqt.qt import (
     QListWidget,
     QListWidgetItem,
     QObject,
+    QPlainTextEdit,
     QPushButton,
     QRunnable,
+    QSizePolicy,
     QSpinBox,
     QTabWidget,
-    QTextEdit,
     QThreadPool,
     QVBoxLayout,
     QWidget,
@@ -26,11 +27,10 @@ from aqt.qt import (
 )
 from aqt.utils import showInfo
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QKeySequence
 
 from .config_manager import config_manager
 from .llm import LLMClient
-from .utils import construct_prompt, parse_field_mappings
+from .utils import construct_prompt, set_line_edit_min_width
 
 
 class ConfigDialog(QDialog):
@@ -40,30 +40,46 @@ class ConfigDialog(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Configure LLM Card Fill")
+
+        # Create main layout
         self._layout = QVBoxLayout()
 
-        # Set a larger window size
-        self.setMinimumWidth(600)
+        # Set a larger window size and make it resizable
+        self.setMinimumWidth(800)  # Wider for two-column layout
         self.setMinimumHeight(700)
+        self.setSizeGripEnabled(True)  # Make the window resizable
 
-        # Tab widget
+        # Create tab widget
         self._tab_widget = QTabWidget()
         self._layout.addWidget(self._tab_widget)
 
         # Setup tabs
         self._setup_general_tab()
         self._setup_model_parameters_tab()
-        self._setup_templates_tab()
+        self._setup_templates_tab_two_column()  # New two-column layout for templates
+
+        # Save and Debug buttons in a horizontal layout
+        button_layout = QHBoxLayout()
+
+        # Add spacer to center the buttons
+        button_layout.addStretch(1)
 
         # Save button
         self._save_button = QPushButton("Save")
         self._save_button.clicked.connect(self._save_config)
-        self._layout.addWidget(self._save_button)
+        self._save_button.setMinimumWidth(100)
+        button_layout.addWidget(self._save_button)
 
         # Debug button
         self._debug_button = QPushButton("Open Debug Dialog")
         self._debug_button.clicked.connect(self._open_debug_dialog)
-        self._layout.addWidget(self._debug_button)
+        self._debug_button.setMinimumWidth(150)
+        button_layout.addWidget(self._debug_button)
+
+        # Add spacer to center the buttons
+        button_layout.addStretch(1)
+
+        self._layout.addLayout(button_layout)
 
         self.setLayout(self._layout)
 
@@ -142,17 +158,23 @@ class ConfigDialog(QDialog):
 
         self._tab_widget.addTab(self._params_tab, "Request Parameters")
 
-    def _setup_templates_tab(self):
+    def _setup_templates_tab_two_column(self):
+        """Setup templates tab with a two-column layout."""
         # Templates tab
         self._templates_tab = QWidget()
-        self._templates_layout = QVBoxLayout(self._templates_tab)
+        main_layout = QHBoxLayout(self._templates_tab)
+
+        # Left column - Instructions, Global Prompt, Preview
+        left_column = QVBoxLayout()
 
         # Instructions for using templates
         self._template_instructions = QLabel(
-            "You can use existing fields in the prompt using <code>{field_name}</code> syntax.",
+            "You can reference card fields in the prompt with <code>{FieldName}</code> syntax. "
+            "In the Field Mappings section, specify which fields should be completed by the AI "
+            "and provide descriptions of what each field should contain.",
         )
         self._template_instructions.setWordWrap(True)
-        self._templates_layout.addWidget(self._template_instructions)
+        left_column.addWidget(self._template_instructions)
 
         # Add HTML to Markdown conversion note
         self._html_md_note = QLabel(
@@ -164,46 +186,27 @@ class ConfigDialog(QDialog):
         self._html_md_note.setStyleSheet(
             "color: #555; font-size: 11px; background-color: #f8f8f8; padding: 5px; border-radius: 3px;",
         )
-        self._templates_layout.addWidget(self._html_md_note)
+        left_column.addWidget(self._html_md_note)
 
         # Global prompt section
-        self._global_prompt_label = QLabel("Global Prompt Template:")
-        self._templates_layout.addWidget(self._global_prompt_label)
+        self._global_prompt_label = QLabel("Global Prompt Template")
+        self._global_prompt_label.setStyleSheet("font-weight: bold;")
+        left_column.addWidget(self._global_prompt_label)
 
-        self._global_prompt_input = QTextEdit()
+        self._global_prompt_input = QPlainTextEdit()
         self._global_prompt_input.setPlaceholderText(
             "Enter your prompt template here. Use {field_name} to reference card fields.\n\n"
             "Example: Given a card with front content '{Front}', generate content for these fields:",
         )
-        self._templates_layout.addWidget(self._global_prompt_input)
-
-        # Field mappings section
-        self._field_mappings_label = QLabel("Field Descriptions:")
-        self._field_description_note = QLabel(
-            "<b>Field Descriptions Format:</b><br>"
-            "Specify fields using the format:<br>"
-            "<code>&lt;field name&gt;: &lt;description for the field&gt;</code>, one per line.<br>"
-            "Example:<br>"
-            "<code>Definition: A definition of the concept</code><br>"
-            "<code>Mnemonic: A memory aid for remembering this concept</code>",
-        )
-        self._field_description_note.setWordWrap(True)
-        self._templates_layout.addWidget(self._field_description_note)
-        self._templates_layout.addWidget(self._field_mappings_label)
-
-        self._field_mappings_input = QTextEdit()
-        self._field_mappings_input.setPlaceholderText(
-            "Example: A practical example of the concept\nMnemonic: A memory aid for remembering this concept",
-        )
-        self._field_mappings_input.setFixedHeight(80)
-        self._templates_layout.addWidget(self._field_mappings_input)
+        left_column.addWidget(self._global_prompt_input)
 
         # Preview section with controls for card selection
         preview_header = QWidget()
         preview_layout = QHBoxLayout(preview_header)
         preview_layout.setContentsMargins(0, 0, 0, 0)
 
-        self._preview_label = QLabel("Prompt Preview:")
+        self._preview_label = QLabel("Prompt Preview")
+        self._preview_label.setStyleSheet("font-weight: bold;")
         preview_layout.addWidget(self._preview_label, 1)
 
         # Add select card button
@@ -217,32 +220,65 @@ class ConfigDialog(QDialog):
         self._clear_card_button.setEnabled(False)  # Initially disabled
         preview_layout.addWidget(self._clear_card_button)
 
-        self._templates_layout.addWidget(preview_header)
+        left_column.addWidget(preview_header)
 
         # Add card info label
         self._card_info_label = QLabel("Using placeholder values for preview")
         self._card_info_label.setStyleSheet("font-style: italic;")
-        self._templates_layout.addWidget(self._card_info_label)
+        left_column.addWidget(self._card_info_label)
 
         # Add token count display
         self._token_count_label = QLabel("")
         self._token_count_label.setStyleSheet("font-weight: bold;")
-        self._templates_layout.addWidget(self._token_count_label)
+        left_column.addWidget(self._token_count_label)
 
-        self._preview_output = QTextEdit()
+        self._preview_output = QPlainTextEdit()
         self._preview_output.setReadOnly(True)
-        self._preview_output.setText("")
-        self._templates_layout.addWidget(self._preview_output)
+        self._preview_output.setPlainText("")
+        left_column.addWidget(self._preview_output)
+
+        # Right column - Field Mappings
+        right_column = QVBoxLayout()
+
+        # Field mappings section
+        self._field_mappings_label = QLabel("Field Mappings")
+        self._field_mappings_label.setStyleSheet("font-weight: bold;")
+        right_column.addWidget(self._field_mappings_label)
+
+        # Create container for field mappings
+        field_mappings_widget = QWidget()
+        self._field_mappings_layout = QVBoxLayout(field_mappings_widget)
+        self._field_mappings_layout.setContentsMargins(0, 0, 0, 0)
+        self._field_mappings_layout.setSpacing(8)  # Spacing between rows
+
+        # Add widget to the right column
+        right_column.addWidget(field_mappings_widget, 1)
+
+        # Add button for adding new field mappings at the bottom of the column
+        self._add_mapping_button = QPushButton("Add Field Mapping")
+        self._add_mapping_button.setStyleSheet("padding: 6px; font-weight: bold;")
+        self._add_mapping_button.clicked.connect(self._create_field_mapping_row)
+        right_column.addWidget(self._add_mapping_button)
+
+        # Add columns to main layout
+        main_layout.addLayout(left_column, 3)  # 60% width
+        main_layout.addLayout(right_column, 2)  # 40% width
 
         # Connect signals to update preview
         self._global_prompt_input.textChanged.connect(self._update_prompt_preview)
-        self._field_mappings_input.textChanged.connect(self._update_prompt_preview)
         self._max_prompt_tokens_input.valueChanged.connect(self._update_prompt_preview)
 
         self._tab_widget.addTab(self._templates_tab, "Templates")
 
         # Initialize selected card variable
         self._selected_note = None
+
+        # Initialize field tracking list
+        self._field_mapping_widgets = []
+
+    def _setup_templates_tab(self):
+        """Legacy method that calls the new two-column layout."""
+        self._setup_templates_tab_two_column()
 
     def _open_debug_dialog(self):
         """Open the debug dialog with the current preview text."""
@@ -264,6 +300,7 @@ class ConfigDialog(QDialog):
 
         # Set model parameters
         temperature = config_manager["temperature"]
+
         max_length = config_manager["max_length"]
         max_prompt_tokens = config_manager["max_prompt_tokens"]
 
@@ -283,12 +320,23 @@ class ConfigDialog(QDialog):
         # Set model after API key is loaded
         self._model_selector.setCurrentText(client_model)
 
+        # Load field mappings
+        field_mappings = config_manager.get("field_mappings", {})
+
+        # Clear existing mappings
+        for i in reversed(range(self._field_mappings_layout.count())):
+            widget = self._field_mappings_layout.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+
+        # Add each mapping using the new UI
+        for prompt_var, note_field in field_mappings.items():
+            self._create_field_mapping_row(prompt_var=prompt_var, note_field=note_field)
+
         # Load template data
         global_prompt = config_manager.get("global_prompt", "")
-        field_mappings = config_manager.get("field_mappings", "")
 
-        self._global_prompt_input.setText(global_prompt)
-        self._field_mappings_input.setText(field_mappings)
+        self._global_prompt_input.setPlainText(global_prompt)
 
         # Update the prompt preview
         self._update_prompt_preview()
@@ -405,52 +453,35 @@ class ConfigDialog(QDialog):
         self._update_model_list()
 
     def _save_config(self):
+        """Save the configuration."""
         client_name = self._client_selector.currentText()
-        model_name = self._model_selector.currentText()
-        api_key = self._api_key_input.text()
-        temperature = self._temperature_input.value()
-        max_length = self._max_length_input.value()
-        max_prompt_tokens = self._max_prompt_tokens_input.value()
 
-        # Keep using .get() for user collections
+        config = {
+            "client": client_name,
+            "temperature": self._temperature_input.value(),
+            "max_length": self._max_length_input.value(),
+            "max_prompt_tokens": self._max_prompt_tokens_input.value(),
+            "global_prompt": self._global_prompt_input.toPlainText(),
+            "field_mappings": self._get_field_mappings_from_widgets(),
+            "shortcut": self._shortcut_input.text(),
+        }
+
         api_keys = config_manager.get("api_keys", {})
         models = config_manager.get("models", {})
 
         # If current key input is the shortened version, get the actual key
+        api_key = self._api_key_input.text()
         if api_key and "..." in api_key:
             # Use config_manager's method to get the full key
             api_key = config_manager.get_api_key_for_client(client_name)
-
         # Update the API key for the current client
         api_keys[client_name] = api_key
 
-        # Save the current model for this client
-        if model_name:
+        if model_name := self._model_selector.currentText():
             models[client_name] = model_name
 
-        global_prompt = self._global_prompt_input.toPlainText()
-        field_mappings = self._field_mappings_input.toPlainText()
-        shortcut = self._shortcut_input.text()
-
-        # Check for shortcut conflicts
-        if QKeySequence(shortcut).isEmpty():
-            showInfo("Invalid shortcut. Please enter a valid shortcut.")
-            return
-
         # Update the config with all values
-        config_manager.update(
-            {
-                "client": client_name,
-                "api_keys": api_keys,  # Store keys per client
-                "models": models,  # Store models per client
-                "temperature": temperature,
-                "max_length": max_length,
-                "max_prompt_tokens": max_prompt_tokens,
-                "global_prompt": global_prompt,
-                "field_mappings": field_mappings,
-                "shortcut": shortcut,
-            },
-        )
+        config_manager.update(config)
 
         # Save the updated configuration using the config manager
         config_manager.save_config()
@@ -459,15 +490,14 @@ class ConfigDialog(QDialog):
     def _update_prompt_preview(self):
         """Update the prompt preview based on current template and field mappings."""
         global_prompt = self._global_prompt_input.toPlainText()
-        field_mappings_text = self._field_mappings_input.toPlainText()
 
-        if not global_prompt and not field_mappings_text:
-            self._preview_output.setText("")
+        # Get field mappings using our helper method
+        field_mappings = self._get_field_mappings_from_widgets()
+
+        if not global_prompt and not field_mappings:
+            self._preview_output.setPlainText("")
             self._token_count_label.setText("")
             return
-
-        # Parse field mappings
-        field_mappings = parse_field_mappings(field_mappings_text)
 
         # Get card fields - either from selected card or use placeholders
         if self._selected_note:
@@ -481,7 +511,7 @@ class ConfigDialog(QDialog):
 
             card_fields = FieldPlaceholder(str)
 
-        # Use the same construct_prompt function that's used for actual LLM calls
+        # Use the construct_prompt function
         preview = construct_prompt(global_prompt, field_mappings, card_fields)
 
         # Estimate token count
@@ -500,7 +530,7 @@ class ConfigDialog(QDialog):
             self._token_count_label.setStyleSheet("color: green; font-weight: bold;")
 
         self._token_count_label.setText(token_info)
-        self._preview_output.setText(preview)
+        self._preview_output.setPlainText(preview)
 
     def _select_card_for_preview(self):
         """Open a dialog to select a card for the preview."""
@@ -534,6 +564,85 @@ class ConfigDialog(QDialog):
         self._clear_card_button.setEnabled(False)
         self._update_prompt_preview()
 
+    def _create_field_mapping_row(self, *, prompt_var="", note_field=""):
+        """Create a row for field mapping with delete button."""
+        row_widget = QWidget()
+        # Use fixed vertical size policy to avoid stretching
+        row_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+        row_layout = QVBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(2)  # Very minimal spacing
+
+        # Top row with field name and delete button
+        field_row = QWidget()
+        field_layout = QHBoxLayout(field_row)
+        field_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create prompt variable input with consistent styling
+        prompt_var_input = QLineEdit(prompt_var)
+        prompt_var_input.setPlaceholderText("Field Name")
+        prompt_var_input.textChanged.connect(self._update_prompt_preview)
+        set_line_edit_min_width(prompt_var_input)
+        prompt_var_input.textChanged.connect(lambda: set_line_edit_min_width(prompt_var_input))
+        prompt_var_input.setStyleSheet("border: 1px solid #ccc; border-radius: 3px; padding: 4px;")
+
+        # Create delete button with consistent styling
+        delete_button = QPushButton("️❌")
+        delete_button.setToolTip("Remove this field mapping")
+        delete_button.setMinimumWidth(30)
+        delete_button.setMaximumWidth(30)
+        delete_button.setStyleSheet("padding: 2px;")
+        delete_button.clicked.connect(lambda: self._remove_specific_mapping(row_widget))
+
+        # Add field name and delete button to top row
+        field_layout.addWidget(prompt_var_input, 1)
+        field_layout.addWidget(delete_button)
+
+        # Add top row to main layout
+        row_layout.addWidget(field_row)
+
+        # Create description input with compact styling
+        note_field_input = QPlainTextEdit()
+        note_field_input.setPlaceholderText("Description of what this field should contain")
+        note_field_input.setPlainText(note_field)
+        # Connect text changed to update height
+        note_field_input.textChanged.connect(self._update_prompt_preview)
+
+        # Add description to main layout
+        row_layout.addWidget(note_field_input)
+
+        self._field_mappings_layout.addWidget(row_widget)
+
+        # Add to our tracking list
+        self._field_mapping_widgets.append(
+            {"widget": row_widget, "prompt_var_input": prompt_var_input, "note_field_input": note_field_input},
+        )
+
+    def _remove_specific_mapping(self, row_widget):
+        """Remove a specific field mapping row."""
+        # Remove the widget from layout and delete it
+        self._field_mappings_layout.removeWidget(row_widget)
+
+        # Remove from our tracking list
+        for i, mapping in enumerate(self._field_mapping_widgets):
+            if mapping["widget"] == row_widget:
+                self._field_mapping_widgets.pop(i)
+                break
+
+        row_widget.deleteLater()
+        self._update_prompt_preview()
+
+    def _get_field_mappings_from_widgets(self) -> dict[str, str]:
+        """Extract field mappings dictionary from widget list"""
+        field_mappings = {}
+        for mapping in self._field_mapping_widgets:
+            prompt_var = mapping["prompt_var_input"].text().strip()
+            note_field = mapping["note_field_input"].toPlainText().strip()
+            if prompt_var and note_field:
+                field_mappings[prompt_var] = note_field
+        return field_mappings
+
 
 class DebugDialog(QDialog):
     """Dialog for testing API calls."""
@@ -550,20 +659,20 @@ class DebugDialog(QDialog):
         self._prompt_label = QLabel("Enter prompt:")
         self._layout.addWidget(self._prompt_label)
 
-        self._prompt_input = QTextEdit()
+        self._prompt_input = QPlainTextEdit()
         self._prompt_input.setPlaceholderText("Enter your prompt here (supports multiple lines)")
         self._prompt_input.setMinimumHeight(150)  # Make it reasonably tall
 
         # Set the initial prompt if provided
         if initial_prompt:
-            self._prompt_input.setText(initial_prompt)
+            self._prompt_input.setPlainText(initial_prompt)
 
         self._layout.addWidget(self._prompt_input)
 
         self._output_label = QLabel("API Response:")
         self._layout.addWidget(self._output_label)
 
-        self._output_display = QTextEdit()
+        self._output_display = QPlainTextEdit()
         self._output_display.setReadOnly(True)
         self._layout.addWidget(self._output_display)
 
@@ -584,11 +693,11 @@ class DebugDialog(QDialog):
         # Get the prompt from the QTextEdit
         prompt = self._prompt_input.toPlainText()
         if not prompt.strip():
-            self._output_display.setText("Please enter a prompt.")
+            self._output_display.setPlainText("Please enter a prompt.")
             return
 
         if not config_manager:
-            self._output_display.setText("No configuration found.")
+            self._output_display.setPlainText("No configuration found.")
             return
 
         client_name = config_manager["client"]
@@ -603,7 +712,7 @@ class DebugDialog(QDialog):
         # Disable the query button and update status
         self._query_button.setEnabled(False)
         self._status_label.setText("Querying API...")
-        self._output_display.setText("Waiting for response...")
+        self._output_display.setPlainText("Waiting for response...")
 
         # Create worker
         worker = DebugLLMWorker(client_name, api_key, model_name, temperature, max_length, prompt)
@@ -618,12 +727,12 @@ class DebugDialog(QDialog):
 
     def _handle_response(self, response):
         """Handle the API response."""
-        self._output_display.setText(response)
+        self._output_display.setPlainText(response)
         self._status_label.setText("Response received.")
 
     def _handle_error(self, error_msg):
         """Handle API errors."""
-        self._output_display.setText(f"Error querying API: {error_msg}")
+        self._output_display.setPlainText(f"Error querying API: {error_msg}")
         self._status_label.setText("Error occurred.")
 
 

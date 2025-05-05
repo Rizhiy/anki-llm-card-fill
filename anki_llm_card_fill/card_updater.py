@@ -9,7 +9,7 @@ from aqt.utils import showInfo, tooltip
 
 from .config_manager import config_manager
 from .llm import LLMClient
-from .utils import construct_prompt, parse_field_mappings, parse_llm_response
+from .utils import construct_prompt, parse_llm_response
 
 if TYPE_CHECKING:
     from anki.notes import Note
@@ -76,10 +76,9 @@ class NoteUpdateWorker(QRunnable):
 
             # Get template configuration
             global_prompt = config_manager.get("global_prompt", "")
-            field_mappings_text = config_manager.get("field_mappings", "")
+            field_mappings = config_manager.get("field_mappings", {})
 
-            # Parse field mappings
-            field_mappings = parse_field_mappings(field_mappings_text)
+            # Check if field mappings exist
             if not field_mappings:
                 self.log_and_emit("No valid field mappings found")
                 return
