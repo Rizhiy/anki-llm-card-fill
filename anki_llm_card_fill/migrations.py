@@ -5,6 +5,9 @@ from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
+# Constants
+DEFAULT_NOTE_TYPE = "__default__"
+
 # Type definition for migration functions
 MigrationFunction = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -38,7 +41,6 @@ def v1(config: dict[str, Any]) -> dict[str, Any]:
 
     # Set schema version
     config["schema_version"] = 1
-
     return config
 
 
@@ -50,7 +52,6 @@ def v2(config: dict[str, Any]) -> dict[str, Any]:
 
     # Set schema version
     config["schema_version"] = 2
-
     return config
 
 
@@ -58,7 +59,6 @@ def v3(config: dict[str, Any]) -> dict[str, Any]:
     """Formalize schema versioning."""
     # Set schema version
     config["schema_version"] = 3
-
     return config
 
 
@@ -82,17 +82,40 @@ def v4(config: dict[str, Any]) -> dict[str, Any]:
 
     # Update schema version
     config["schema_version"] = 4
+    return config
 
+
+def v5(config: dict[str, Any]) -> dict[str, Any]:
+    """Migrate to note type-specific prompts and field mappings.
+
+    Convert the global prompt and field_mappings to a structure where
+    different note types can have their own prompts and field mappings.
+    """
+    # Create the new note_prompts dictionary if it doesn't exist
+    config["note_prompts"] = {}
+
+    # Move existing global prompt and field mappings to default entry
+    global_prompt = config.get("global_prompt", "")
+    field_mappings = config.get("field_mappings", {})
+    config["note_prompts"][DEFAULT_NOTE_TYPE] = {
+        "prompt": global_prompt,
+        "field_mappings": field_mappings,
+    }
+    del config["global_prompt"]
+    del config["field_mappings"]
+
+    config["schema_version"] = 5
     return config
 
 
 # Mapping of version numbers to migration functions
-MIGRATIONS = {
-    0: v1,
-    1: v2,
-    2: v3,
-    3: v4,
-}
+MIGRATIONS = [
+    v1,
+    v2,
+    v3,
+    v4,
+    v5,
+]
 
 # Current schema version
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5

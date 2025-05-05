@@ -59,9 +59,9 @@ class NoteUpdateWorker(QRunnable):
     def run(self):
         """Perform the full note update process."""
         try:
-            # Validate configuration
+            note_type_name = self.note.note_type()["name"]
             try:
-                config_manager.validate_settings()
+                config_manager.validate_settings(note_type_name)
             except ValueError as e:
                 self.log_and_emit(str(e))
                 return
@@ -74,20 +74,14 @@ class NoteUpdateWorker(QRunnable):
             max_length = config_manager["max_length"]
             max_prompt_tokens = config_manager["max_prompt_tokens"]
 
-            # Get template configuration
-            global_prompt = config_manager.get("global_prompt", "")
-            field_mappings = config_manager.get("field_mappings", {})
-
-            # Check if field mappings exist
-            if not field_mappings:
-                self.log_and_emit("No valid field mappings found")
-                return
-
+            # Get template configuration for this note type
+            prompt = config_manager.get_prompt_for_note_type(note_type_name)
+            field_mappings = config_manager.get_field_mappings_for_note_type(note_type_name)
             # Construct prompt
-            prompt = construct_prompt(global_prompt, field_mappings, dict(self.note.items()))
+            filled_prompt = construct_prompt(prompt, field_mappings, dict(self.note.items()))
 
             # Check prompt length
-            estimated_tokens = estimate_token_count(prompt)
+            estimated_tokens = estimate_token_count(filled_prompt)
             if estimated_tokens > max_prompt_tokens:
                 self.log_and_emit(
                     f"Prompt exceeds maximum token limit. Estimated tokens: {estimated_tokens}, "
@@ -100,7 +94,7 @@ class NoteUpdateWorker(QRunnable):
             client = client_cls(model=model_name, temperature=temperature, max_length=max_length, api_key=api_key)
 
             # Call LLM
-            response = client(prompt)
+            response = client(filled_prompt)
 
             # Parse response
             field_updates = parse_llm_response(response)
@@ -113,8 +107,7 @@ class NoteUpdateWorker(QRunnable):
                 if field_name in self.note:
                     self.note[field_name] = content
 
-            # Save changes
-            self.note.flush()
+            mw.col.update_note(self.note)
 
             # Signal success
             self.signals.completed.emit(True)

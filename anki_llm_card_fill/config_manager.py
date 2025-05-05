@@ -7,7 +7,7 @@ from typing import Any
 
 from aqt import mw
 
-from .migrations import CURRENT_SCHEMA_VERSION, MIGRATIONS
+from .migrations import CURRENT_SCHEMA_VERSION, DEFAULT_NOTE_TYPE, MIGRATIONS
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class ConfigManager(UserDict):
 
             schema_version += 1
 
-    def get_api_key_for_client(self, client_name):
+    def get_api_key_for_client(self, client_name: str) -> str:
         """Get the API key for a specific client.
 
         :param client_name: The name of the client to get the API key for
@@ -91,7 +91,7 @@ class ConfigManager(UserDict):
         """
         return self["api_keys"].get(client_name, "")
 
-    def get_model_for_client(self, client_name):
+    def get_model_for_client(self, client_name: str) -> str:
         """Get the model for a specific client.
 
         :param client_name: The name of the client to get the model for
@@ -99,23 +99,48 @@ class ConfigManager(UserDict):
         """
         return self["models"].get(client_name, "")
 
-    def validate_settings(self) -> None:
-        """Validate that required settings have been configured by the user.
+    def validate_settings(self, note_type: str) -> None:
+        """Validate that required settings have been configured for a specific note type.
 
-        :raises ValueError: If any required settings are missing, with a message
-                          describing what's missing
+        :param note_type: The note type to validate settings for
+        :raises ValueError: If required settings are missing
         """
-        # Check required client settings
-        client_name = self["client"]
-        if not self["api_keys"].get(client_name, ""):
-            raise ValueError(f"API key for {client_name} not configured")
+        client = self["client"]
+        if not self.get_model_for_client(client):
+            raise ValueError("Model not selected")
 
-        # Check template settings
-        if not self.get("global_prompt", ""):
-            raise ValueError("Prompt template not configured")
+        if not self.get_api_key_for_client(client):
+            raise ValueError("API key not configured")
 
-        if not self.get("field_mappings", ""):
-            raise ValueError("Field mappings not configured")
+        if not self.get_note_type_config(note_type):
+            raise ValueError("Note type prompt not configured")
+
+        if not self.get_field_mappings_for_note_type(note_type):
+            raise ValueError("Note type field mappings not configured")
+
+    def get_note_type_config(self, note_type: str) -> dict[str, Any]:
+        """Get the prompt configuration for a specific note type, with fallback to default.
+
+        :param note_type: The name of the note type
+        :return: A dictionary containing prompt and field_mappings
+        """
+        return self["note_prompts"].get(note_type, self["note_prompts"][DEFAULT_NOTE_TYPE])
+
+    def get_prompt_for_note_type(self, note_type: str) -> str:
+        """Get the prompt template for a specific note type.
+
+        :param note_type: The name of the note type
+        :return: The prompt template string
+        """
+        return self.get_note_type_config(note_type)["prompt"]
+
+    def get_field_mappings_for_note_type(self, note_type: str) -> dict[str, str]:
+        """Get the field mappings for a specific note type.
+
+        :param note_type: The name of the note type
+        :return: Dictionary mapping prompt variables to note fields
+        """
+        return self.get_note_type_config(note_type)["field_mappings"]
 
 
 config_manager = ConfigManager()

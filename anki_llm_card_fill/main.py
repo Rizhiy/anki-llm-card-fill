@@ -14,11 +14,8 @@ qconnect(config_action.triggered, open_config_dialog)
 submenu.addAction(config_action)
 
 # Action + Shortcut for reviewer
-shortcut = "Ctrl+A"  # Default shortcut
-if config_manager:
-    shortcut = config_manager["shortcut"]
 update_action = QAction("Update Card with LLM", mw)
-update_action.setShortcut(QKeySequence(shortcut))
+update_action.setShortcut(QKeySequence(config_manager["shortcut"]))
 qconnect(update_action.triggered, update_reviewer_card)
 submenu.addAction(update_action)
 

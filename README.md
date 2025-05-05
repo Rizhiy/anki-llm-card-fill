@@ -66,7 +66,7 @@ Finally, link/copy the `anki_llm_card_fill` directory to relevant place on your 
 ## TODO
 
 - [x] Add config upgrader code
-- [ ] Add ability to fill in multiple cards
-- [ ] Handle each field to be filled individually
+- [x] Add ability to fill in multiple cards
+- [x] Handle each field to be filled individually
 - [ ] Add schema support
 - [ ] Add audio and images

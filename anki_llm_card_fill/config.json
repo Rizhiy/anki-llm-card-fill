@@ -8,5 +8,6 @@
     "api_keys": {},
     "models": {
         "OpenAI": "gpt-4.1"
-    }
+    },
+    "note_prompts": {}
 }

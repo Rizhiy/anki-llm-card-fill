@@ -30,6 +30,7 @@ from PyQt6.QtCore import Qt, QTimer
 
 from .config_manager import config_manager
 from .llm import LLMClient
+from .migrations import DEFAULT_NOTE_TYPE
 from .utils import construct_prompt, set_line_edit_min_width
 
 
@@ -56,7 +57,7 @@ class ConfigDialog(QDialog):
         # Setup tabs
         self._setup_general_tab()
         self._setup_model_parameters_tab()
-        self._setup_templates_tab_two_column()  # New two-column layout for templates
+        self._setup_templates_tab()
 
         # Save and Debug buttons in a horizontal layout
         button_layout = QHBoxLayout()
@@ -158,13 +159,13 @@ class ConfigDialog(QDialog):
 
         self._tab_widget.addTab(self._params_tab, "Request Parameters")
 
-    def _setup_templates_tab_two_column(self):
-        """Setup templates tab with a two-column layout."""
+    def _setup_templates_tab(self):
+        """Setup templates tab with a two-column layout supporting note types."""
         # Templates tab
         self._templates_tab = QWidget()
         main_layout = QHBoxLayout(self._templates_tab)
 
-        # Left column - Instructions, Global Prompt, Preview
+        # Left column - Instructions, Card Type Selector, Global Prompt, Preview
         left_column = QVBoxLayout()
 
         # Instructions for using templates
@@ -184,9 +185,40 @@ class ConfigDialog(QDialog):
         )
         self._html_md_note.setWordWrap(True)
         self._html_md_note.setStyleSheet(
-            "color: #555; font-size: 11px; background-color: #f8f8f8; padding: 5px; border-radius: 3px;",
+            "color: #555555; font-size: 11px; background-color: #f8f8f8; padding: 5px; border-radius: 3px;",
         )
         left_column.addWidget(self._html_md_note)
+
+        # Add card type selector
+        note_type_layout = QHBoxLayout()
+
+        self._note_type_label = QLabel("Note type")
+        self._note_type_label.setStyleSheet("font-weight: bold;")
+        note_type_layout.addWidget(self._note_type_label)
+
+        self._note_type_selector = QComboBox()
+        self._note_type_selector.addItem(DEFAULT_NOTE_TYPE, DEFAULT_NOTE_TYPE)
+        self._note_type_selector.currentIndexChanged.connect(self._on_note_type_changed)
+        note_type_layout.addWidget(self._note_type_selector, 1)
+
+        # Add button to add new card type
+        self._add_note_type_button = QPushButton("+")
+        self._add_note_type_button.setToolTip("Add new note type")
+        self._add_note_type_button.clicked.connect(self._add_new_note_type)
+        self._add_note_type_button.setMaximumWidth(30)
+        self._add_note_type_button.setStyleSheet("padding: 2px;")
+        note_type_layout.addWidget(self._add_note_type_button)
+
+        # Add button to remove current card type
+        self._remove_note_type_button = QPushButton("️❌")
+        self._remove_note_type_button.setToolTip("Remove selected note type")
+        self._remove_note_type_button.clicked.connect(self._remove_current_note_type)
+        self._remove_note_type_button.setMaximumWidth(30)
+        self._remove_note_type_button.setStyleSheet("padding: 2px;")
+        note_type_layout.addWidget(self._remove_note_type_button)
+        self._current_note_type = DEFAULT_NOTE_TYPE
+
+        left_column.addLayout(note_type_layout)
 
         # Global prompt section
         self._global_prompt_label = QLabel("Global Prompt Template")
@@ -212,6 +244,7 @@ class ConfigDialog(QDialog):
         # Add select card button
         self._select_card_button = QPushButton("Select Card for Preview")
         self._select_card_button.clicked.connect(self._select_card_for_preview)
+        self._selected_note = None
         preview_layout.addWidget(self._select_card_button)
 
         # Add clear selection button
@@ -270,15 +303,9 @@ class ConfigDialog(QDialog):
 
         self._tab_widget.addTab(self._templates_tab, "Templates")
 
-        # Initialize selected card variable
-        self._selected_note = None
-
         # Initialize field tracking list
         self._field_mapping_widgets = []
-
-    def _setup_templates_tab(self):
-        """Legacy method that calls the new two-column layout."""
-        self._setup_templates_tab_two_column()
+        self._template_initialised = False
 
     def _open_debug_dialog(self):
         """Open the debug dialog with the current preview text."""
@@ -297,10 +324,8 @@ class ConfigDialog(QDialog):
 
         # Set client and model
         client_name = config_manager["client"]
-
         # Set model parameters
         temperature = config_manager["temperature"]
-
         max_length = config_manager["max_length"]
         max_prompt_tokens = config_manager["max_prompt_tokens"]
 
@@ -316,34 +341,15 @@ class ConfigDialog(QDialog):
 
         # Get model for current client
         client_model = config_manager.get_model_for_client(client_name)
-
-        # Set model after API key is loaded
         self._model_selector.setCurrentText(client_model)
 
-        # Load field mappings
-        field_mappings = config_manager.get("field_mappings", {})
+        self._load_available_note_types()
 
-        # Clear existing mappings
-        for i in reversed(range(self._field_mappings_layout.count())):
-            widget = self._field_mappings_layout.itemAt(i).widget()
-            if widget:
-                widget.deleteLater()
-
-        # Add each mapping using the new UI
-        for prompt_var, note_field in field_mappings.items():
-            self._create_field_mapping_row(prompt_var=prompt_var, note_field=note_field)
-
-        # Load template data
-        global_prompt = config_manager.get("global_prompt", "")
-
-        self._global_prompt_input.setPlainText(global_prompt)
+        # Load shortcut
+        self._shortcut_input.setText(config_manager["shortcut"])
 
         # Update the prompt preview
         self._update_prompt_preview()
-
-        # Load shortcut
-        shortcut = config_manager["shortcut"]
-        self._shortcut_input.setText(shortcut)
 
     def _update_model_list(self):
         """Update the model list for the current client."""
@@ -456,13 +462,14 @@ class ConfigDialog(QDialog):
         """Save the configuration."""
         client_name = self._client_selector.currentText()
 
+        # Update the current note type config and get the full note_prompts dictionary
+        self._update_current_note_type_config()
+
         config = {
             "client": client_name,
             "temperature": self._temperature_input.value(),
             "max_length": self._max_length_input.value(),
             "max_prompt_tokens": self._max_prompt_tokens_input.value(),
-            "global_prompt": self._global_prompt_input.toPlainText(),
-            "field_mappings": self._get_field_mappings_from_widgets(),
             "shortcut": self._shortcut_input.text(),
         }
 
@@ -619,7 +626,7 @@ class ConfigDialog(QDialog):
             {"widget": row_widget, "prompt_var_input": prompt_var_input, "note_field_input": note_field_input},
         )
 
-    def _remove_specific_mapping(self, row_widget):
+    def _remove_specific_mapping(self, row_widget: QWidget) -> None:
         """Remove a specific field mapping row."""
         # Remove the widget from layout and delete it
         self._field_mappings_layout.removeWidget(row_widget)
@@ -630,6 +637,7 @@ class ConfigDialog(QDialog):
                 self._field_mapping_widgets.pop(i)
                 break
 
+        row_widget.setParent(None)
         row_widget.deleteLater()
         self._update_prompt_preview()
 
@@ -642,6 +650,154 @@ class ConfigDialog(QDialog):
             if prompt_var and note_field:
                 field_mappings[prompt_var] = note_field
         return field_mappings
+
+    def _load_field_mappings(self, field_mappings):
+        """Load field mappings from a dictionary.
+
+        Args:
+            field_mappings: Dictionary mapping field names to descriptions
+        """
+        for mapping in list(self._field_mapping_widgets):
+            self._remove_specific_mapping(mapping["widget"])
+
+        # Add each mapping from the dictionary
+        for prompt_var, note_field in field_mappings.items():
+            self._create_field_mapping_row(prompt_var=prompt_var, note_field=note_field)
+
+        # Update the preview
+        self._update_prompt_preview()
+
+    def _update_current_note_type_config(self) -> None:
+        """Update the configuration for the current note type"""
+        if not self._template_initialised:
+            return
+        field_mappings = self._get_field_mappings_from_widgets()
+        global_prompt = self._global_prompt_input.toPlainText()
+        note_prompts = config_manager["note_prompts"]
+        note_prompts[self._current_note_type] = {
+            "prompt": global_prompt,
+            "field_mappings": field_mappings,
+        }
+        config_manager["note_prompts"] = note_prompts
+
+    def _on_note_type_changed(self, _):
+        """Handle when the note type selection changes."""
+        # Save the current note type's configuration
+        self._update_current_note_type_config()
+        self._current_note_type = self._note_type_selector.currentData()
+        if not self._current_note_type:
+            return
+
+        # Load the appropriate prompt and field mappings for this note type
+        note_prompts = config_manager["note_prompts"]
+
+        note_type_config = note_prompts.get(self._current_note_type, {})
+        self._global_prompt_input.setPlainText(note_type_config.get("prompt", ""))
+        self._load_field_mappings(note_type_config.get("field_mappings", {}))
+
+        # Update remove button state (can't remove default)
+        self._remove_note_type_button.setEnabled(self._current_note_type != DEFAULT_NOTE_TYPE)
+        self._update_prompt_preview()
+        self._template_initialised = True
+
+    def _load_available_note_types(self):
+        """Load available note types from Anki collection and add to selector."""
+        # Clear existing card types except default
+        self._note_type_selector.clear()
+
+        # Get card types from config
+        note_prompts = config_manager["note_prompts"]
+
+        for note_type in list(note_prompts):
+            self._note_type_selector.addItem(note_type, note_type)
+
+        self._on_note_type_changed(0)
+
+    def _add_new_note_type(self):
+        """Add a new note type configuration by selecting an existing Anki note type."""
+        # Only proceed if we have access to the Anki collection
+        if not mw or not mw.col:
+            showInfo("Cannot access Anki collection")
+            return
+
+        # Get all available note types from the collection
+        all_note_types = mw.col.models.all_names()
+
+        # Get current note types from config
+        note_prompts = config_manager["note_prompts"]
+        existing_types = set(note_prompts.keys())
+
+        # Filter out already configured note types
+        available_types = [nt for nt in all_note_types if nt not in existing_types]
+
+        if not available_types:
+            showInfo("All note types are already configured")
+            return
+
+        # Create a selection dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select Note Type")
+        layout = QVBoxLayout()
+
+        # Create a combobox for note type selection
+        combo_box = QComboBox()
+        for note_type in available_types:
+            combo_box.addItem(note_type, note_type)  # Store note type as user data
+        layout.addWidget(combo_box)
+
+        # Add OK/Cancel buttons
+        button_box = QHBoxLayout()
+        ok_button = QPushButton("OK")
+        cancel_button = QPushButton("Cancel")
+
+        ok_button.clicked.connect(dialog.accept)
+        cancel_button.clicked.connect(dialog.reject)
+
+        button_box.addWidget(ok_button)
+        button_box.addWidget(cancel_button)
+        layout.addLayout(button_box)
+
+        dialog.setLayout(layout)
+
+        # Execute the dialog
+        if dialog.exec():
+            # Get the selected note type
+            selected_note_type = combo_box.currentData()
+
+            # Add the new note type to the selector
+            self._note_type_selector.addItem(selected_note_type, selected_note_type)
+
+            # Select the newly added note type
+            new_index = self._note_type_selector.findData(selected_note_type)
+            if new_index >= 0:
+                self._note_type_selector.setCurrentIndex(new_index)
+
+    def _remove_current_note_type(self):
+        """Remove the currently selected note type."""
+        current_note_type = self._current_note_type
+
+        # Can't remove default
+        if current_note_type == DEFAULT_NOTE_TYPE:
+            showInfo("Cannot remove the default note type configuration")
+            return
+
+        # Get note prompts
+        note_prompts = config_manager["note_prompts"]
+
+        # Remove the current note type from the config
+        if current_note_type in note_prompts:
+            del note_prompts[current_note_type]
+            config_manager["note_prompts"] = note_prompts
+        self._template_initialised = False
+
+        # Remove from the selector
+        current_index = self._note_type_selector.currentIndex()
+        self._note_type_selector.removeItem(current_index)
+
+        # Select default
+        default_index = self._note_type_selector.findData(DEFAULT_NOTE_TYPE)
+        if default_index >= 0:
+            self._note_type_selector.setCurrentIndex(default_index)
 
 
 class DebugDialog(QDialog):
