@@ -38,6 +38,15 @@ You can also update the note from editor window using the "LLM" button or update
 To debug your prompt you can select an example card to see what exactly will be sent to the LLM.
 You can also make the request and see response using Debug Dialog.
 
+- Supports configurations for multiple note types
+
+### Differences from other addons
+
+This addon is simpler than existing alternatives, but has the following advantages:
+
+- AnkiBrain - No external dependencies, can use your own keys, without installing stuff separately.
+- SmartNotes - Can use your own API keys
+
 ## Development
 
 Create a virtual environment with your preferred method.
@@ -70,3 +79,4 @@ Finally, link/copy the `anki_llm_card_fill` directory to relevant place on your 
 - [x] Handle each field to be filled individually
 - [ ] Add schema support
 - [ ] Add audio and images
+- [ ] Request functionality
