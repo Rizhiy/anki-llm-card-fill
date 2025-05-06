@@ -17,7 +17,6 @@ from aqt.qt import (
     QPlainTextEdit,
     QPushButton,
     QRunnable,
-    QSizePolicy,
     QSpinBox,
     QTabWidget,
     QThreadPool,
@@ -28,10 +27,9 @@ from aqt.qt import (
 from aqt.utils import showInfo
 from PyQt6.QtCore import Qt, QTimer
 
-from .config_manager import config_manager
+from .config_manager import ConfigManager
 from .llm import LLMClient
-from .migrations import DEFAULT_NOTE_TYPE
-from .utils import construct_prompt, set_line_edit_min_width
+from .utils import construct_prompt
 
 
 class ConfigDialog(QDialog):
@@ -40,6 +38,7 @@ class ConfigDialog(QDialog):
 
     def __init__(self):
         super().__init__()
+        self._config_manager = ConfigManager()
         self.setWindowTitle("Configure LLM Card Fill")
 
         # Create main layout
@@ -197,7 +196,6 @@ class ConfigDialog(QDialog):
         note_type_layout.addWidget(self._note_type_label)
 
         self._note_type_selector = QComboBox()
-        self._note_type_selector.addItem(DEFAULT_NOTE_TYPE, DEFAULT_NOTE_TYPE)
         self._note_type_selector.currentIndexChanged.connect(self._on_note_type_changed)
         note_type_layout.addWidget(self._note_type_selector, 1)
 
@@ -216,7 +214,6 @@ class ConfigDialog(QDialog):
         self._remove_note_type_button.setMaximumWidth(30)
         self._remove_note_type_button.setStyleSheet("padding: 2px;")
         note_type_layout.addWidget(self._remove_note_type_button)
-        self._current_note_type = DEFAULT_NOTE_TYPE
 
         left_column.addLayout(note_type_layout)
 
@@ -318,16 +315,16 @@ class ConfigDialog(QDialog):
         return f"{key[:3]}...{key[-3:]}"
 
     def _load_existing_config(self):
-        # Use config_manager directly as a dictionary
-        if not config_manager:
+        # Use self._config_manager directly as a dictionary
+        if not self._config_manager:
             return
 
         # Set client and model
-        client_name = config_manager["client"]
+        client_name = self._config_manager["client"]
         # Set model parameters
-        temperature = config_manager["temperature"]
-        max_length = config_manager["max_length"]
-        max_prompt_tokens = config_manager["max_prompt_tokens"]
+        temperature = self._config_manager["temperature"]
+        max_length = self._config_manager["max_length"]
+        max_prompt_tokens = self._config_manager["max_prompt_tokens"]
 
         self._client_selector.setCurrentText(client_name)
         self._temperature_input.setValue(temperature)
@@ -335,18 +332,18 @@ class ConfigDialog(QDialog):
         self._max_prompt_tokens_input.setValue(max_prompt_tokens)
 
         # Get API key for the current client
-        api_key = config_manager.get_api_key_for_client(client_name)
+        api_key = self._config_manager.get_api_key_for_client(client_name)
         if api_key:
             self._api_key_input.setText(self._shorten_key(api_key))
 
         # Get model for current client
-        client_model = config_manager.get_model_for_client(client_name)
+        client_model = self._config_manager.get_model_for_client(client_name)
         self._model_selector.setCurrentText(client_model)
 
         self._load_available_note_types()
 
         # Load shortcut
-        self._shortcut_input.setText(config_manager["shortcut"])
+        self._shortcut_input.setText(self._config_manager["shortcut"])
 
         # Update the prompt preview
         self._update_prompt_preview()
@@ -364,7 +361,7 @@ class ConfigDialog(QDialog):
             # Check if the key is already in shortened format or empty
             if not api_key or api_key == self._shorten_key(api_key):
                 # Key is already shortened or empty, get the full key from config
-                api_key = config_manager.get_api_key_for_client(client_name)
+                api_key = self._config_manager.get_api_key_for_client(client_name)
 
             # Show loading state
             self._model_selector.clear()
@@ -409,7 +406,7 @@ class ConfigDialog(QDialog):
 
         # Restore previous selection if possible
         client_name = self._client_selector.currentText()
-        previous_model = config_manager.get_model_for_client(client_name)
+        previous_model = self._config_manager.get_model_for_client(client_name)
 
         if previous_model:
             index = self._model_selector.findText(previous_model)
@@ -445,7 +442,7 @@ class ConfigDialog(QDialog):
         self._api_key_link.setText(f'<a href="{api_key_link}">Get your {client_name} API key</a>')
 
         # Get API key for the new client
-        api_key = config_manager.get_api_key_for_client(client_name)
+        api_key = self._config_manager.get_api_key_for_client(client_name)
 
         # Update the API key field if we have a key for this client
         if api_key:
@@ -473,14 +470,14 @@ class ConfigDialog(QDialog):
             "shortcut": self._shortcut_input.text(),
         }
 
-        api_keys = config_manager.get("api_keys", {})
-        models = config_manager.get("models", {})
+        api_keys = self._config_manager.get("api_keys", {})
+        models = self._config_manager.get("models", {})
 
         # If current key input is the shortened version, get the actual key
         api_key = self._api_key_input.text()
         if api_key and "..." in api_key:
-            # Use config_manager's method to get the full key
-            api_key = config_manager.get_api_key_for_client(client_name)
+            # Use self._config_manager's method to get the full key
+            api_key = self._config_manager.get_api_key_for_client(client_name)
         # Update the API key for the current client
         api_keys[client_name] = api_key
 
@@ -488,10 +485,10 @@ class ConfigDialog(QDialog):
             models[client_name] = model_name
 
         # Update the config with all values
-        config_manager.update(config)
+        self._config_manager.update(config)
 
         # Save the updated configuration using the config manager
-        config_manager.save_config()
+        self._config_manager.save_config()
         showInfo("Configuration saved!")
 
     def _update_prompt_preview(self):
@@ -542,7 +539,7 @@ class ConfigDialog(QDialog):
     def _select_card_for_preview(self):
         """Open a dialog to select a card for the preview."""
         # Create and show the selection dialog
-        dialog = CardSelectDialog(self)
+        dialog = CardSelectDialog(self, self._current_note_type)
 
         if dialog.exec():
             # User selected a card and hit OK
@@ -574,8 +571,11 @@ class ConfigDialog(QDialog):
     def _create_field_mapping_row(self, *, prompt_var="", note_field=""):
         """Create a row for field mapping with delete button."""
         row_widget = QWidget()
-        # Use fixed vertical size policy to avoid stretching
-        row_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+        def get_valid_field_names() -> list[str]:
+            note_type_fields = mw.col.models.by_name(self._current_note_type)["flds"]
+            existing_mappings = {mapping["prompt_var_input"].currentText() for mapping in self._field_mapping_widgets}
+            return [field["name"] for field in note_type_fields if field["name"] not in existing_mappings]
 
         row_layout = QVBoxLayout(row_widget)
         row_layout.setContentsMargins(0, 0, 0, 0)
@@ -587,12 +587,28 @@ class ConfigDialog(QDialog):
         field_layout.setContentsMargins(0, 0, 0, 0)
 
         # Create prompt variable input with consistent styling
-        prompt_var_input = QLineEdit(prompt_var)
-        prompt_var_input.setPlaceholderText("Field Name")
-        prompt_var_input.textChanged.connect(self._update_prompt_preview)
-        set_line_edit_min_width(prompt_var_input)
-        prompt_var_input.textChanged.connect(lambda: set_line_edit_min_width(prompt_var_input))
-        prompt_var_input.setStyleSheet("border: 1px solid #ccc; border-radius: 3px; padding: 4px;")
+        prompt_var_input = QComboBox()
+        prompt_var_input.addItems(get_valid_field_names())
+
+        prev_selection = None
+
+        def select_field_name(_):
+            nonlocal prev_selection
+            selected_item = prompt_var_input.currentText()
+            if selected_item == prev_selection:
+                return
+            for mapping in self._field_mapping_widgets:
+                combo_box = mapping["prompt_var_input"]
+                if combo_box == prompt_var_input:
+                    continue
+                combo_box.removeItem(combo_box.findText(selected_item))
+                if prev_selection:
+                    combo_box.addItem(prev_selection)
+            prev_selection = selected_item
+
+        prompt_var_input.currentIndexChanged.connect(select_field_name)
+        prompt_var_input.setCurrentText(prompt_var)
+        prompt_var_input.currentIndexChanged.connect(lambda: self._update_prompt_preview())
 
         # Create delete button with consistent styling
         delete_button = QPushButton("️❌")
@@ -600,7 +616,6 @@ class ConfigDialog(QDialog):
         delete_button.setMinimumWidth(30)
         delete_button.setMaximumWidth(30)
         delete_button.setStyleSheet("padding: 2px;")
-        delete_button.clicked.connect(lambda: self._remove_specific_mapping(row_widget))
 
         # Add field name and delete button to top row
         field_layout.addWidget(prompt_var_input, 1)
@@ -621,31 +636,34 @@ class ConfigDialog(QDialog):
 
         self._field_mappings_layout.addWidget(row_widget)
 
+        mapping = {"widget": row_widget, "prompt_var_input": prompt_var_input, "note_field_input": note_field_input}
+        delete_button.clicked.connect(lambda: self._remove_specific_mapping(mapping))
         # Add to our tracking list
-        self._field_mapping_widgets.append(
-            {"widget": row_widget, "prompt_var_input": prompt_var_input, "note_field_input": note_field_input},
-        )
+        self._field_mapping_widgets.append(mapping)
 
-    def _remove_specific_mapping(self, row_widget: QWidget) -> None:
+    def _remove_specific_mapping(self, mapping: dict[str, QWidget]) -> None:
         """Remove a specific field mapping row."""
         # Remove the widget from layout and delete it
-        self._field_mappings_layout.removeWidget(row_widget)
+        self._field_mappings_layout.removeWidget(mapping["widget"])
+        # Add field name to all other field inputs
+        for other in self._field_mapping_widgets:
+            other["prompt_var_input"].addItem(mapping["prompt_var_input"].currentText())
 
         # Remove from our tracking list
-        for i, mapping in enumerate(self._field_mapping_widgets):
-            if mapping["widget"] == row_widget:
-                self._field_mapping_widgets.pop(i)
+        for idx, other in enumerate(self._field_mapping_widgets):
+            if other == mapping:
+                self._field_mapping_widgets.pop(idx)
                 break
 
-        row_widget.setParent(None)
-        row_widget.deleteLater()
+        mapping["widget"].setParent(None)
+        mapping["widget"].deleteLater()
         self._update_prompt_preview()
 
     def _get_field_mappings_from_widgets(self) -> dict[str, str]:
         """Extract field mappings dictionary from widget list"""
         field_mappings = {}
         for mapping in self._field_mapping_widgets:
-            prompt_var = mapping["prompt_var_input"].text().strip()
+            prompt_var = mapping["prompt_var_input"].currentText().strip()
             note_field = mapping["note_field_input"].toPlainText().strip()
             if prompt_var and note_field:
                 field_mappings[prompt_var] = note_field
@@ -658,7 +676,7 @@ class ConfigDialog(QDialog):
             field_mappings: Dictionary mapping field names to descriptions
         """
         for mapping in list(self._field_mapping_widgets):
-            self._remove_specific_mapping(mapping["widget"])
+            self._remove_specific_mapping(mapping)
 
         # Add each mapping from the dictionary
         for prompt_var, note_field in field_mappings.items():
@@ -673,12 +691,12 @@ class ConfigDialog(QDialog):
             return
         field_mappings = self._get_field_mappings_from_widgets()
         global_prompt = self._global_prompt_input.toPlainText()
-        note_prompts = config_manager["note_prompts"]
+        note_prompts = self._config_manager["note_prompts"]
         note_prompts[self._current_note_type] = {
             "prompt": global_prompt,
             "field_mappings": field_mappings,
         }
-        config_manager["note_prompts"] = note_prompts
+        self._config_manager["note_prompts"] = note_prompts
 
     def _on_note_type_changed(self, _):
         """Handle when the note type selection changes."""
@@ -689,14 +707,13 @@ class ConfigDialog(QDialog):
             return
 
         # Load the appropriate prompt and field mappings for this note type
-        note_prompts = config_manager["note_prompts"]
+        note_prompts = self._config_manager["note_prompts"]
 
         note_type_config = note_prompts.get(self._current_note_type, {})
         self._global_prompt_input.setPlainText(note_type_config.get("prompt", ""))
         self._load_field_mappings(note_type_config.get("field_mappings", {}))
 
-        # Update remove button state (can't remove default)
-        self._remove_note_type_button.setEnabled(self._current_note_type != DEFAULT_NOTE_TYPE)
+        self._clear_preview_card()
         self._update_prompt_preview()
         self._template_initialised = True
 
@@ -706,7 +723,7 @@ class ConfigDialog(QDialog):
         self._note_type_selector.clear()
 
         # Get card types from config
-        note_prompts = config_manager["note_prompts"]
+        note_prompts = self._config_manager["note_prompts"]
 
         for note_type in list(note_prompts):
             self._note_type_selector.addItem(note_type, note_type)
@@ -724,7 +741,7 @@ class ConfigDialog(QDialog):
         all_note_types = mw.col.models.all_names()
 
         # Get current note types from config
-        note_prompts = config_manager["note_prompts"]
+        note_prompts = self._config_manager["note_prompts"]
         existing_types = set(note_prompts.keys())
 
         # Filter out already configured note types
@@ -776,28 +793,18 @@ class ConfigDialog(QDialog):
         """Remove the currently selected note type."""
         current_note_type = self._current_note_type
 
-        # Can't remove default
-        if current_note_type == DEFAULT_NOTE_TYPE:
-            showInfo("Cannot remove the default note type configuration")
-            return
-
         # Get note prompts
-        note_prompts = config_manager["note_prompts"]
+        note_prompts = self._config_manager["note_prompts"]
 
         # Remove the current note type from the config
         if current_note_type in note_prompts:
             del note_prompts[current_note_type]
-            config_manager["note_prompts"] = note_prompts
+            self._config_manager["note_prompts"] = note_prompts
         self._template_initialised = False
 
         # Remove from the selector
         current_index = self._note_type_selector.currentIndex()
         self._note_type_selector.removeItem(current_index)
-
-        # Select default
-        default_index = self._note_type_selector.findData(DEFAULT_NOTE_TYPE)
-        if default_index >= 0:
-            self._note_type_selector.setCurrentIndex(default_index)
 
 
 class DebugDialog(QDialog):
@@ -805,6 +812,7 @@ class DebugDialog(QDialog):
 
     def __init__(self, parent=None, initial_prompt=None):
         super().__init__(parent)
+        self._config_manager = ConfigManager()
         self.setWindowTitle("LLM API Debug")
         self._layout = QVBoxLayout()
 
@@ -852,23 +860,22 @@ class DebugDialog(QDialog):
             self._output_display.setPlainText("Please enter a prompt.")
             return
 
-        if not config_manager:
+        if not self._config_manager:
             self._output_display.setPlainText("No configuration found.")
             return
 
-        client_name = config_manager["client"]
+        client_name = self._config_manager["client"]
 
-        # Get the API key and model using config_manager methods
-        api_key = config_manager.get_api_key_for_client(client_name)
-        model_name = config_manager.get_model_for_client(client_name)
+        # Get the API key and model using self._config_manager methods
+        api_key = self._config_manager.get_api_key_for_client(client_name)
+        model_name = self._config_manager.get_model_for_client(client_name)
 
-        temperature = config_manager["temperature"]
-        max_length = config_manager["max_length"]
+        temperature = self._config_manager["temperature"]
+        max_length = self._config_manager["max_length"]
 
         # Disable the query button and update status
         self._query_button.setEnabled(False)
         self._status_label.setText("Querying API...")
-        self._output_display.setPlainText("Waiting for response...")
 
         # Create worker
         worker = DebugLLMWorker(client_name, api_key, model_name, temperature, max_length, prompt)
@@ -934,8 +941,9 @@ class DebugLLMWorker(QRunnable):
 class CardSelectDialog(QDialog):
     """Dialog for selecting a card for prompt preview."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent, note_type: str):
         super().__init__(parent)
+        self._note_type = note_type
         self.setWindowTitle("Select Card for Preview")
         self.setMinimumWidth(600)
         self.setMinimumHeight(400)
@@ -1025,6 +1033,8 @@ class CardSelectDialog(QDialog):
         """Search for cards based on the query and selected deck."""
         # Get the base query from the search input
         base_query = self.search_input.text().strip()
+
+        base_query = f'"note:{self._note_type}" {base_query}'
 
         # Get the selected deck ID and name
         deck_id = self.deck_selector.currentData()

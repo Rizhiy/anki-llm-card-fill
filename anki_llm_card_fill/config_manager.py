@@ -7,13 +7,20 @@ from typing import Any
 
 from aqt import mw
 
-from .migrations import CURRENT_SCHEMA_VERSION, DEFAULT_NOTE_TYPE, MIGRATIONS
+from .migrations import CURRENT_SCHEMA_VERSION, MIGRATIONS
 
 logger = logging.getLogger(__name__)
 
 
 class ConfigManager(UserDict):
     """Manages configuration for the Anki LLM Card Fill addon."""
+
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super().__new__(cls, *args, **kwargs)
+        return cls._instance
 
     def __init__(self):
         super().__init__()
@@ -78,10 +85,15 @@ class ConfigManager(UserDict):
         while schema_version < CURRENT_SCHEMA_VERSION:
             migration_func = MIGRATIONS[schema_version]
             logger.info(f"Applying migration from v{schema_version} to v{schema_version + 1}")
-            self.data = migration_func(self.data)
-            logger.info(f"Successfully migrated from v{schema_version} to v{schema_version + 1}")
+            try:
+                self.data = migration_func(self.data)
+                logger.info(f"Successfully migrated from v{schema_version} to v{schema_version + 1}")
+            except Exception:
+                logger.exception(f"Error migrating from v{schema_version} to v{schema_version + 1}")
+                raise
 
             schema_version += 1
+        self.save_config()
 
     def get_api_key_for_client(self, client_name: str) -> str:
         """Get the API key for a specific client.
@@ -113,6 +125,9 @@ class ConfigManager(UserDict):
             raise ValueError("API key not configured")
 
         if not self.get_note_type_config(note_type):
+            raise ValueError("Note type config not configured")
+
+        if not self.get_prompt_for_note_type(note_type):
             raise ValueError("Note type prompt not configured")
 
         if not self.get_field_mappings_for_note_type(note_type):
@@ -124,7 +139,7 @@ class ConfigManager(UserDict):
         :param note_type: The name of the note type
         :return: A dictionary containing prompt and field_mappings
         """
-        return self["note_prompts"].get(note_type, self["note_prompts"][DEFAULT_NOTE_TYPE])
+        return self["note_prompts"].get(note_type, {})
 
     def get_prompt_for_note_type(self, note_type: str) -> str:
         """Get the prompt template for a specific note type.
@@ -143,6 +158,4 @@ class ConfigManager(UserDict):
         return self.get_note_type_config(note_type)["field_mappings"]
 
 
-config_manager = ConfigManager()
-
-__all__ = ["config_manager", "ConfigManager"]
+__all__ = ["ConfigManager"]

@@ -7,7 +7,7 @@ from aqt import mw
 from aqt.qt import QApplication, QMessageBox, QObject, QProgressDialog, QRunnable, Qt, QThreadPool, pyqtSignal
 from aqt.utils import showInfo, tooltip
 
-from .config_manager import config_manager
+from .config_manager import ConfigManager
 from .llm import LLMClient
 from .utils import construct_prompt, parse_llm_response
 
@@ -59,6 +59,7 @@ class NoteUpdateWorker(QRunnable):
     def run(self):
         """Perform the full note update process."""
         try:
+            config_manager = ConfigManager()
             note_type_name = self.note.note_type()["name"]
             try:
                 config_manager.validate_settings(note_type_name)

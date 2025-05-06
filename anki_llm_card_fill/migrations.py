@@ -3,6 +3,9 @@
 import logging
 from typing import Any, Callable
 
+from aqt import mw
+from aqt.qt import QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+
 logger = logging.getLogger(__name__)
 
 # Constants
@@ -108,6 +111,90 @@ def v5(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+def v6(config: dict[str, Any]) -> dict[str, Any]:
+    """Migrate default note type to user-selected note type.
+
+    This migration will present a dialog asking the user to select a note type,
+    and migrate the default configuration to that note type.
+    """
+    # If no default prompt exists yet, nothing to do
+    note_prompts = config["note_prompts"]
+    default_config = note_prompts.get(DEFAULT_NOTE_TYPE, {})
+
+    try:
+        note_types = mw.col.models.all_names()
+    except Exception as e:
+        raise ValueError(f"Error accessing note types: {e}") from None
+
+    if not note_types:
+        raise ValueError("No note types found in Anki collection")
+
+    # Create a dialog to ask the user which note type to use
+    class NoteTypeSelectDialog(QDialog):
+        def __init__(self):
+            super().__init__(mw)
+            self.setWindowTitle("LLM Card Fill - Select Note Type")
+            self.layout = QVBoxLayout()
+
+            # Add explanation with add-on name
+            explanation = QLabel(
+                "<b>LLM Card Fill Add-on Configuration</b><br><br>"
+                "We need to migrate your existing configuration to a specific note type. "
+                "Please select the note type you want to use with LLM Card Fill:",
+            )
+            explanation.setWordWrap(True)
+            self.layout.addWidget(explanation)
+
+            # Add note type selector
+            self.selector = QComboBox()
+            for note_type in note_types:
+                self.selector.addItem(note_type)
+            self.layout.addWidget(self.selector)
+
+            # Add explanation of what's happening
+            migration_info = QLabel(
+                "This migration is required because the code has been updated to support "
+                "note type-specific configuration. Your existing default configuration will "
+                "be migrated to the selected note type.",
+            )
+            migration_info.setWordWrap(True)
+            self.layout.addWidget(migration_info)
+
+            # Add buttons
+            button_layout = QHBoxLayout()
+            self.ok_button = QPushButton("OK")
+            self.ok_button.clicked.connect(self.accept)
+            self.cancel_button = QPushButton("Cancel")
+            self.cancel_button.clicked.connect(self.reject)
+
+            button_layout.addWidget(self.ok_button)
+            button_layout.addWidget(self.cancel_button)
+            self.layout.addLayout(button_layout)
+
+            self.setLayout(self.layout)
+
+    dialog = NoteTypeSelectDialog()
+    result = dialog.exec()
+
+    # Only proceed with migration if user confirmed their selection
+    if result:
+        selected_note_type = dialog.selector.currentText()
+
+        # Copy default config to selected note type
+        note_prompts[selected_note_type] = {
+            "prompt": default_config.get("prompt", ""),
+            "field_mappings": default_config.get("field_mappings", {}),
+        }
+        del note_prompts[DEFAULT_NOTE_TYPE]
+
+        # Update schema version only after successful migration
+        config["schema_version"] = 6
+    else:
+        raise ValueError("Migration canceled")
+
+    return config
+
+
 # Mapping of version numbers to migration functions
 MIGRATIONS = [
     v1,
@@ -115,7 +202,8 @@ MIGRATIONS = [
     v3,
     v4,
     v5,
+    v6,
 ]
 
 # Current schema version
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
