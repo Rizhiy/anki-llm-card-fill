@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v0.6.0 (2025-05-06)
+
+### Chores
+
+- Remove migration plan and update config.json
+  ([`afc1c9d`](https://github.com/Rizhiy/anki-llm-card-fill/commit/afc1c9ddcdcd580d336d4f4e3646fe90775d52ac))
+
+### Features
+
+- Add support for multiple note types
+  ([`d3109b1`](https://github.com/Rizhiy/anki-llm-card-fill/commit/d3109b1c48d6f19503a544ad1fa9e9e8346407e3))
+
+- Select field types from note info
+  ([`d5b9b56`](https://github.com/Rizhiy/anki-llm-card-fill/commit/d5b9b5654db8a4a578d2cfacbabf0e07f68f316d))
+
+### Refactoring
+
+- Change fields to use individual fields
+  ([`8013a9c`](https://github.com/Rizhiy/anki-llm-card-fill/commit/8013a9c0a26f106bd7458a4d148ad7fc109d86f1))
+
+- Implement config manager
+  ([`308f915`](https://github.com/Rizhiy/anki-llm-card-fill/commit/308f915aadbf66f3f079b58a2b75d65b7bb65d63))
+
+- Use config manager
+  ([`4e9d116`](https://github.com/Rizhiy/anki-llm-card-fill/commit/4e9d11647fd620b085db29bb663eaba237e239e2))
+
+
 ## v0.5.2 (2025-04-18)
 
 ### Bug Fixes
