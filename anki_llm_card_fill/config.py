@@ -170,7 +170,7 @@ class ConfigDialog(QDialog):
         # Instructions for using templates
         self._template_instructions = QLabel(
             "You can reference card fields in the prompt with <code>{FieldName}</code> syntax. "
-            "In the Field Mappings section, specify which fields should be completed by the AI "
+            "In the Fields to Update section, specify which fields should be completed by the AI "
             "and provide descriptions of what each field should contain.",
         )
         self._template_instructions.setWordWrap(True)
@@ -267,11 +267,11 @@ class ConfigDialog(QDialog):
         self._preview_output.setPlainText("")
         left_column.addWidget(self._preview_output)
 
-        # Right column - Field Mappings
+        # Right column - Field mappings
         right_column = QVBoxLayout()
 
-        # Field mappings section
-        self._field_mappings_label = QLabel("Field Mappings")
+        # Add label for field mappings
+        self._field_mappings_label = QLabel("Fields to Update")
         self._field_mappings_label.setStyleSheet("font-weight: bold;")
         right_column.addWidget(self._field_mappings_label)
 
@@ -285,8 +285,7 @@ class ConfigDialog(QDialog):
         right_column.addWidget(field_mappings_widget, 1)
 
         # Add button for adding new field mappings at the bottom of the column
-        self._add_mapping_button = QPushButton("Add Field Mapping")
-        self._add_mapping_button.setStyleSheet("padding: 6px; font-weight: bold;")
+        self._add_mapping_button = QPushButton("Add Field")
         self._add_mapping_button.clicked.connect(self._create_field_mapping_row)
         right_column.addWidget(self._add_mapping_button)
 
