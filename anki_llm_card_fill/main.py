@@ -2,6 +2,7 @@ from aqt import QKeySequence, gui_hooks, mw
 from aqt.browser import Browser
 from aqt.qt import QAction, QMenu, qconnect
 
+from .card_creator import open_card_creation_dialog
 from .card_updater import update_browser_notes, update_editor_note, update_reviewer_card
 from .config import open_config_dialog
 from .config_manager import ConfigManager
@@ -12,6 +13,14 @@ submenu = QMenu("LLM Card Fill", mw)
 config_action = QAction("Configure LLM Card Fill", mw)
 qconnect(config_action.triggered, open_config_dialog)
 submenu.addAction(config_action)
+
+# Add separator
+submenu.addSeparator()
+
+# Create New Card action
+create_card_action = QAction("Create New Card with LLM", mw)
+qconnect(create_card_action.triggered, open_card_creation_dialog)
+submenu.addAction(create_card_action)
 
 
 shortcut_exists = False
@@ -72,6 +81,11 @@ def on_browser_setup_menus(browser: Browser) -> None:
     action = QAction("Fill Selected Notes with LLM", browser)
     qconnect(action.triggered, lambda: update_browser_notes(browser))
     browser.form.menu_Notes.addAction(action)
+
+    # Add create card action to browser
+    create_action = QAction("Create New Card with LLM", browser)
+    qconnect(create_action.triggered, open_card_creation_dialog)
+    browser.form.menu_Notes.addAction(create_action)
 
 
 gui_hooks.browser_menus_did_init.append(on_browser_setup_menus)

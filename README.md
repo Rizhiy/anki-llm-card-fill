@@ -39,6 +39,7 @@ To debug your prompt you can select an example card to see what exactly will be 
 You can also make the request and see response using Debug Dialog.
 
 - Supports configurations for multiple note types
+- Supports creating cards from input
 
 ### Differences from other addons
 
@@ -77,6 +78,11 @@ Finally, link/copy the `anki_llm_card_fill` directory to relevant place on your 
 - [x] Add config upgrader code
 - [x] Add ability to fill in multiple cards
 - [x] Handle each field to be filled individually
+- [x] Add card creation feature
 - [ ] Add schema support
 - [ ] Add audio and images
 - [ ] Request functionality
+- [ ] Global prompt
+- [ ] Refactor code
+- [ ] Update examples
+- [ ] Change card creation to use thread worker as well and unify with update worker

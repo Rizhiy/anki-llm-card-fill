@@ -195,6 +195,41 @@ def v6(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+def v7(config: dict[str, Any]) -> dict[str, Any]:
+    """Rename 'prompt' to 'update_prompt' and add 'create_prompt' in note_prompts.
+
+    This migration updates the structure to support separate prompts for:
+    - Updating existing cards (update_prompt)
+    - Creating new cards (create_prompt)
+    """
+    note_prompts = config["note_prompts"]
+
+    for note_config in note_prompts.values():
+        note_config["update_prompt"] = note_config["prompt"]
+        del note_config["prompt"]
+
+    config["note_prompts"] = note_prompts
+
+    config["schema_version"] = 7
+    return config
+
+
+def v8(config: dict[str, Any]) -> dict[str, Any]:
+    """Add 'create_only_fields' to each note type configuration.
+
+    This allows some fields to be editable only during card creation,
+    but not when updating existing cards.
+    """
+    note_prompts = config["note_prompts"]
+
+    for note_config in note_prompts.values():
+        note_config["create_only_fields"] = []
+
+    config["note_prompts"] = note_prompts
+    config["schema_version"] = 8
+    return config
+
+
 # Mapping of version numbers to migration functions
 MIGRATIONS = [
     v1,
@@ -203,7 +238,9 @@ MIGRATIONS = [
     v4,
     v5,
     v6,
+    v7,
+    v8,
 ]
 
 # Current schema version
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 8

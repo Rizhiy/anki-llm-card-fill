@@ -1,6 +1,7 @@
 import socket
 import threading
 from collections import defaultdict
+from typing import Any
 
 from aqt import mw
 from aqt.qt import (
@@ -18,14 +19,15 @@ from aqt.qt import (
     QPushButton,
     QRunnable,
     QSpinBox,
+    Qt,
     QTabWidget,
     QThreadPool,
+    QTimer,
     QVBoxLayout,
     QWidget,
     pyqtSignal,
 )
 from aqt.utils import showInfo
-from PyQt6.QtCore import Qt, QTimer
 
 from .config_manager import ConfigManager
 from .llm import LLMClient
@@ -151,10 +153,15 @@ class ConfigDialog(QDialog):
 
         # Add max prompt tokens setting
         self._max_prompt_tokens_label = QLabel("Max Prompt Length (tokens):")
-        self._max_prompt_tokens_label.setToolTip("Limit the maximum length of prompts to avoid excessive token usage")
+        self._max_prompt_tokens_label.setToolTip(
+            "Limit the maximum length of prompts to avoid excessive token usage",
+        )
         self._max_prompt_tokens_input = QSpinBox()
         self._max_prompt_tokens_input.setRange(1, 4096)
-        self._params_layout.addRow(self._max_prompt_tokens_label, self._max_prompt_tokens_input)
+        self._params_layout.addRow(
+            self._max_prompt_tokens_label,
+            self._max_prompt_tokens_input,
+        )
 
         self._tab_widget.addTab(self._params_tab, "Request Parameters")
 
@@ -367,7 +374,9 @@ class ConfigDialog(QDialog):
 
             if not api_key:
                 # No API key provided - show a message
-                self._model_selector.addItem(f"Enter {client_name} API key to see models")
+                self._model_selector.addItem(
+                    f"Enter {client_name} API key to see models",
+                )
                 self._model_selector.setEnabled(False)
                 return
 
@@ -383,7 +392,9 @@ class ConfigDialog(QDialog):
             worker = ModelFetchWorker(client_name, client_cls, api_key)
             worker.signals.result.connect(self._on_models_loaded)
             worker.signals.error.connect(self._on_models_error)
-            worker.signals.finished.connect(lambda: ConfigDialog._model_update_lock.release())
+            worker.signals.finished.connect(
+                lambda: ConfigDialog._model_update_lock.release(),
+            )
 
             # Start the worker
             QThreadPool.globalInstance().start(worker)
@@ -438,7 +449,9 @@ class ConfigDialog(QDialog):
 
         # Update API key link
         api_key_link = client_cls.get_api_key_link()
-        self._api_key_link.setText(f'<a href="{api_key_link}">Get your {client_name} API key</a>')
+        self._api_key_link.setText(
+            f'<a href="{api_key_link}">Get your {client_name} API key</a>',
+        )
 
         # Get API key for the new client
         api_key = self._config_manager.get_api_key_for_client(client_name)
@@ -554,7 +567,9 @@ class ConfigDialog(QDialog):
                 if len(first_field_content) > 30:
                     first_field_content = first_field_content[:27] + "..."
 
-                self._card_info_label.setText(f"Using selected card: {note_type} - {first_field_content}")
+                self._card_info_label.setText(
+                    f"Using selected card: {note_type} - {first_field_content}",
+                )
                 self._clear_card_button.setEnabled(True)
 
                 # Update the preview with the selected card's data
@@ -607,7 +622,9 @@ class ConfigDialog(QDialog):
 
         prompt_var_input.currentIndexChanged.connect(select_field_name)
         prompt_var_input.setCurrentText(prompt_var)
-        prompt_var_input.currentIndexChanged.connect(lambda: self._update_prompt_preview())
+        prompt_var_input.currentIndexChanged.connect(
+            lambda: self._update_prompt_preview(),
+        )
 
         # Create delete button with consistent styling
         delete_button = QPushButton("️❌")
@@ -625,7 +642,9 @@ class ConfigDialog(QDialog):
 
         # Create description input with compact styling
         note_field_input = QPlainTextEdit()
-        note_field_input.setPlaceholderText("Description of what this field should contain")
+        note_field_input.setPlaceholderText(
+            "Description of what this field should contain",
+        )
         note_field_input.setPlainText(note_field)
         # Connect text changed to update height
         note_field_input.textChanged.connect(self._update_prompt_preview)
@@ -635,7 +654,11 @@ class ConfigDialog(QDialog):
 
         self._field_mappings_layout.addWidget(row_widget)
 
-        mapping = {"widget": row_widget, "prompt_var_input": prompt_var_input, "note_field_input": note_field_input}
+        mapping = {
+            "widget": row_widget,
+            "prompt_var_input": prompt_var_input,
+            "note_field_input": note_field_input,
+        }
         delete_button.clicked.connect(lambda: self._remove_specific_mapping(mapping))
         # Add to our tracking list
         self._field_mapping_widgets.append(mapping)
@@ -668,12 +691,13 @@ class ConfigDialog(QDialog):
                 field_mappings[prompt_var] = note_field
         return field_mappings
 
-    def _load_field_mappings(self, field_mappings):
+    def _load_field_mappings(self, note_prompts: dict[str, Any]):
         """Load field mappings from a dictionary.
 
         Args:
             field_mappings: Dictionary mapping field names to descriptions
         """
+        field_mappings = note_prompts.get("field_mappings", {})
         for mapping in list(self._field_mapping_widgets):
             self._remove_specific_mapping(mapping)
 
@@ -691,10 +715,19 @@ class ConfigDialog(QDialog):
         field_mappings = self._get_field_mappings_from_widgets()
         global_prompt = self._global_prompt_input.toPlainText()
         note_prompts = self._config_manager["note_prompts"]
-        note_prompts[self._current_note_type] = {
-            "prompt": global_prompt,
-            "field_mappings": field_mappings,
-        }
+
+        # Get existing config or create a new one
+        note_type_config = note_prompts.get(self._current_note_type, {})
+
+        # Update with new values
+        note_type_config.update(
+            {
+                "update_prompt": global_prompt,
+                "field_mappings": field_mappings,
+            },
+        )
+
+        note_prompts[self._current_note_type] = note_type_config
         self._config_manager["note_prompts"] = note_prompts
 
     def _on_note_type_changed(self, _):
@@ -706,11 +739,13 @@ class ConfigDialog(QDialog):
             return
 
         # Load the appropriate prompt and field mappings for this note type
-        note_prompts = self._config_manager["note_prompts"]
+        note_prompts = self._config_manager["note_prompts"].get(
+            self._current_note_type,
+            {},
+        )
 
-        note_type_config = note_prompts.get(self._current_note_type, {})
-        self._global_prompt_input.setPlainText(note_type_config.get("prompt", ""))
-        self._load_field_mappings(note_type_config.get("field_mappings", {}))
+        self._global_prompt_input.setPlainText(note_prompts.get("update_prompt", ""))
+        self._load_field_mappings(note_prompts)
 
         self._clear_preview_card()
         self._update_prompt_preview()
@@ -823,7 +858,9 @@ class DebugDialog(QDialog):
         self._layout.addWidget(self._prompt_label)
 
         self._prompt_input = QPlainTextEdit()
-        self._prompt_input.setPlaceholderText("Enter your prompt here (supports multiple lines)")
+        self._prompt_input.setPlaceholderText(
+            "Enter your prompt here (supports multiple lines)",
+        )
         self._prompt_input.setMinimumHeight(150)  # Make it reasonably tall
 
         # Set the initial prompt if provided
@@ -877,7 +914,14 @@ class DebugDialog(QDialog):
         self._status_label.setText("Querying API...")
 
         # Create worker
-        worker = DebugLLMWorker(client_name, api_key, model_name, temperature, max_length, prompt)
+        worker = DebugLLMWorker(
+            client_name,
+            api_key,
+            model_name,
+            temperature,
+            max_length,
+            prompt,
+        )
 
         # Connect signals
         worker.signals.result.connect(self._handle_response)
@@ -909,7 +953,15 @@ class DebugWorkerSignals(QObject):
 class DebugLLMWorker(QRunnable):
     """Worker for making LLM API calls in the debug dialog."""
 
-    def __init__(self, client_name, api_key, model_name, temperature, max_length, prompt):
+    def __init__(
+        self,
+        client_name,
+        api_key,
+        model_name,
+        temperature,
+        max_length,
+        prompt,
+    ):
         super().__init__()
         self.client_name = client_name
         self.api_key = api_key
@@ -1055,13 +1107,17 @@ class CardSelectDialog(QDialog):
             self.results_list.clear()
 
             if not card_ids:
-                self.status_label.setText(f"No cards found matching your criteria. Query: {query}")
+                self.status_label.setText(
+                    f"No cards found matching your criteria. Query: {query}",
+                )
                 return
 
             # Limit to 100 cards for performance
             displayed_cards = card_ids[:100]
             if len(card_ids) > 100:
-                self.status_label.setText(f"Found {len(card_ids)} cards (showing first 100)")
+                self.status_label.setText(
+                    f"Found {len(card_ids)} cards (showing first 100)",
+                )
             else:
                 self.status_label.setText(f"Found {len(card_ids)} cards")
 

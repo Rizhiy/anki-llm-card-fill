@@ -76,7 +76,7 @@ class NoteUpdateWorker(QRunnable):
             max_prompt_tokens = config_manager["max_prompt_tokens"]
 
             # Get template configuration for this note type
-            prompt = config_manager.get_prompt_for_note_type(note_type_name)
+            prompt = config_manager.get_prompt_for_update(note_type_name)
             field_mappings = config_manager.get_field_mappings_for_note_type(note_type_name)
             # Construct prompt
             filled_prompt = construct_prompt(prompt, field_mappings, dict(self.note.items()))
