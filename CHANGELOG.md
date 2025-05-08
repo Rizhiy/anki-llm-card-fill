@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.7.0 (2025-05-08)
+
+### Chores
+
+- Improve wording
+  ([`889c975`](https://github.com/Rizhiy/anki-llm-card-fill/commit/889c97501aa2e4a0a4bba880d1acd6e24baaacb3))
+
+### Features
+
+- Add interface to create new cards from user input
+  ([`0a9e6e4`](https://github.com/Rizhiy/anki-llm-card-fill/commit/0a9e6e49e9315dc71fbcc0ee7ca4f5da5b39c4e8))
+
+
 ## v0.6.0 (2025-05-06)
 
 ### Chores
