@@ -1,0 +1,40 @@
+{
+  "models": [
+    {
+      "name": "claude-3-opus-20240229",
+      "vision": true
+    },
+    {
+      "name": "claude-3-sonnet-20240229",
+      "vision": true
+    },
+    {
+      "name": "claude-3-haiku-20240307",
+      "vision": true
+    },
+    {
+      "name": "claude-2.1",
+      "vision": false
+    },
+    {
+      "name": "claude-2.0",
+      "vision": false
+    },
+    {
+      "name": "claude-instant-1.2",
+      "vision": false
+    },
+    {
+        "name": "claude-3-5-haiku-20241022",
+        "vision": true
+    },
+    {
+        "name": "claude-3-5-sonnet-20241022",
+        "vision": true
+    },
+    {
+        "name": "claude-3-7-sonnet-20250219",
+        "vision": true
+    }
+  ]
+}

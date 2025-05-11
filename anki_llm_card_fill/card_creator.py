@@ -18,6 +18,7 @@ from .card_updater import estimate_token_count
 from .config import DebugDialog
 from .config_manager import ConfigManager
 from .llm import LLMClient
+from .rich_text_edit import QImageTextEdit
 from .utils import construct_prompt, parse_llm_response
 
 logger = logging.getLogger()
@@ -145,7 +146,7 @@ class CardCreationDialog(QDialog):
         self._input_label.setStyleSheet("font-weight: bold;")
         parent_layout.addWidget(self._input_label)
 
-        self._user_input = QPlainTextEdit()
+        self._user_input = QImageTextEdit()
         self._user_input.setPlaceholderText(
             "Enter text that will be used to generate the card...",
         )
@@ -181,15 +182,11 @@ class CardCreationDialog(QDialog):
         self._create_button.clicked.connect(self._create_card)
         actions_layout.addWidget(self._create_button)
 
-        self._cancel_button = QPushButton("Cancel")
-        self._cancel_button.clicked.connect(self.reject)
-        actions_layout.addWidget(self._cancel_button)
-
         self._layout.addWidget(actions_widget)
 
     def _open_debug_dialog(self):
         """Open the debug dialog with the current preview text."""
-        user_input = self._user_input.toPlainText()
+        user_input = self._get_user_input_text()
         if not user_input:
             showInfo("Please enter some input text first.")
             return
@@ -434,7 +431,7 @@ class CardCreationDialog(QDialog):
         """Preview the prompt that will be sent to the LLM."""
         global_prompt = self._prompt_input.toPlainText()
         field_mappings = self._get_field_mappings_from_widgets()
-        user_input = self._user_input.toPlainText()
+        user_input = self._get_user_input_text()
 
         if not global_prompt or not user_input:
             showInfo("Please enter both a prompt template and input text.")
@@ -476,7 +473,7 @@ class CardCreationDialog(QDialog):
         note_type_name = self._note_type_selector.currentText()
         deck_id = self._deck_selector.currentData()
 
-        user_input = self._user_input.toPlainText()
+        user_input = self._get_user_input_text()
         if not user_input.strip():
             showInfo("Please enter input text.")
             return
@@ -519,7 +516,18 @@ class CardCreationDialog(QDialog):
 
             tooltip("Calling LLM...")
 
-            response = client(prompt)
+            images = None
+            if self._user_input.images:
+                available_models = client_cls.get_available_models()
+                model_info = next((m for m in available_models if m.get("name") == model_name), {})
+                supports_vision = model_info.get("vision", False)
+
+                if supports_vision:
+                    images = self._user_input.images
+                else:
+                    showInfo(f"Model '{model_name}' does not support images. Images will be ignored.")
+
+            response = client(prompt, images=images)
 
             field_updates = parse_llm_response(response)
 
@@ -542,14 +550,11 @@ class CardCreationDialog(QDialog):
             mw.col.save()
 
             # Use tooltip instead of showInfo and keep dialog open
-            tooltip("Card created successfully!", period=3000)  # Show for 3 seconds
+            tooltip("Card created successfully!")  # Show for 3 seconds
 
             # Clear the input field for the next card
             self._user_input.clear()
             self._user_input.setFocus()
-
-            # Clear token count label since input is cleared
-            self._token_count_label.setText("")
 
         except Exception as e:
             logger.exception("Error creating card")
@@ -640,7 +645,7 @@ class CardCreationDialog(QDialog):
 
     def _update_token_count(self):
         """Update the token count based on the current input and prompt."""
-        user_input = self._user_input.toPlainText()
+        user_input = self._get_user_input_text()
         global_prompt = self._prompt_input.toPlainText()
 
         if not global_prompt or not user_input:
@@ -667,6 +672,11 @@ class CardCreationDialog(QDialog):
             self._token_count_label.setStyleSheet("color: green; font-weight: bold;")
 
         self._token_count_label.setText(token_info)
+
+    def _get_user_input_text(self):
+        """Get plain text from user input, whether it's QPlainTextEdit or QTextEdit."""
+        # QTextEdit has toPlainText that handles HTML content
+        return self._user_input.toPlainText()
 
 
 def open_card_creation_dialog():

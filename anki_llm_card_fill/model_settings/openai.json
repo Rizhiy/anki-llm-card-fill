@@ -1,0 +1,48 @@
+{
+    "models": [
+        {
+            "name": "gpt-3.5-turbo",
+            "vision": false
+        },
+        {
+            "name": "gpt-4-turbo",
+            "vision": false
+        },
+        {
+            "name": "gpt-4o",
+            "vision": true
+        },
+        {
+            "name": "gpt-4o-mini",
+            "vision": true
+        },
+        {
+            "name": "gpt-4.1",
+            "vision": true
+        },
+        {
+            "name": "gpt-4.1-mini",
+            "vision": true
+        },
+        {
+            "name": "o1",
+            "vision": true
+        },
+        {
+            "name": "o1-mini",
+            "vision": false
+        },
+        {
+            "name": "o3",
+            "vision": true
+        },
+        {
+            "name": "o3-mini",
+            "vision": false
+        },
+        {
+            "name": "o4-mini",
+            "vision": true
+        }
+    ]
+}

@@ -6,5 +6,5 @@ if [ "$cwd" != "anki-llm-card-fill" ]; then
 fi
 
 cd anki_llm_card_fill
-zip -r ../llm_card_fill.ankiaddon config.json *.py
+zip -r ../llm_card_fill.ankiaddon config.json *.py model_settings/*
 cd -

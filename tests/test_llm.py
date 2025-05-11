@@ -23,7 +23,10 @@ class TestLLMClientImpl:
     def test_get_available_model(self, client_cls):
         models = client_cls.get_available_models()
         assert isinstance(models, list)
-        assert all(isinstance(name, str) for name in models)
+        assert all(isinstance(model, dict) for model in models)
+        assert all("name" in model and "vision" in model for model in models)
+        assert all(isinstance(model["name"], str) for model in models)
+        assert all(isinstance(model["vision"], bool) for model in models)
 
     def test_call(self, client_cls):
         if client_cls == AnthropicClient:

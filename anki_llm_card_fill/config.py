@@ -99,11 +99,39 @@ class ConfigDialog(QDialog):
         self._client_selector.addItems(LLMClient.get_available_clients())
         self._client_selector.currentIndexChanged.connect(self._on_client_changed)
         self._general_layout.addRow(self._client_label, self._client_selector)
+        self._models = []
 
-        # Model selection
+        # Model selection with vision support indicator
         self._model_label = QLabel("Select Model:")
+
+        # Create a container for model selector and vision indicator
+        model_container = QWidget()
+        model_layout = QHBoxLayout(model_container)
+        model_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins for tighter layout
+
+        # Add model selector to the container
         self._model_selector = QComboBox()
-        self._general_layout.addRow(self._model_label, self._model_selector)
+        self._model_selector.currentIndexChanged.connect(self._on_model_changed)
+        model_layout.addWidget(self._model_selector)
+
+        # Add vision support indicator to the container
+        self._vision_support_label = QLabel("")
+        self._vision_support_label.setStyleSheet("font-weight: bold; margin-left: 10px;")
+        model_layout.addWidget(self._vision_support_label)
+
+        # Add the container to the form layout
+        self._general_layout.addRow(self._model_label, model_container)
+
+        # Add note about vision mode support
+        vision_note = QLabel(
+            "<i>Note: Vision capability (image input) is currently only supported in the "
+            "card creation dialog, not for updating existing cards.</i>",
+        )
+        vision_note.setWordWrap(True)
+        vision_note.setStyleSheet(
+            "color: #555555; font-size: 11px; background-color: #f8f8f8; padding: 5px; border-radius: 3px;",
+        )
+        self._general_layout.addRow(vision_note)
 
         # API Key input
         self._api_key_label = QLabel("Enter your API key:")
@@ -378,11 +406,18 @@ class ConfigDialog(QDialog):
                     f"Enter {client_name} API key to see models",
                 )
                 self._model_selector.setEnabled(False)
+                # Clear vision support label
+                self._vision_support_label.setText("N/A")
+                self._vision_support_label.setStyleSheet("color: gray; font-weight: bold;")
                 return
 
             # API key provided - try to fetch models
             self._model_selector.addItem("Loading models...")
             self._model_selector.setEnabled(False)
+            # Clear vision support label
+            self._vision_support_label.setText("Loading...")
+            self._vision_support_label.setStyleSheet("color: gray; font-weight: bold;")
+
             # Check if we're already updating models
             if not ConfigDialog._model_update_lock.acquire(blocking=False):
                 # Another thread is already updating models, so we'll just return
@@ -407,12 +442,19 @@ class ConfigDialog(QDialog):
         """Handle successfully loaded models."""
         self._model_selector.clear()
         self._model_selector.setEnabled(True)
+        self._models = models  # Store models for later reference
 
         if not models:
             self._model_selector.addItem("No models available")
+            # Update vision support indicator
+            self._vision_support_label.setText("N/A")
+            self._vision_support_label.setStyleSheet("color: gray; font-weight: bold;")
             return
 
-        self._model_selector.addItems(models)
+        # Add each model to the dropdown
+        for model in models:
+            # Each model is now a dict with 'name' and 'vision' keys
+            self._model_selector.addItem(model["name"])
 
         # Restore previous selection if possible
         client_name = self._client_selector.currentText()
@@ -429,6 +471,10 @@ class ConfigDialog(QDialog):
         self._model_selector.addItem("Error loading models")
         self._model_selector.setEnabled(False)  # Disable the model selector
 
+        # Update vision support indicator
+        self._vision_support_label.setText("N/A")
+        self._vision_support_label.setStyleSheet("color: gray; font-weight: bold;")
+
         # Also show an info popup with more details
         client_name = self._client_selector.currentText()
         error_message = (
@@ -440,6 +486,24 @@ class ConfigDialog(QDialog):
             "- The API service is available"
         )
         showInfo(error_message)
+
+    def _on_model_changed(self, _=None):
+        """Handle when the model selection changes."""
+        # Update vision support indicator
+        model_name = self._model_selector.currentText()
+
+        for model in self._models:
+            if model["name"] == model_name:
+                if model["vision"]:
+                    self._vision_support_label.setText("Vision ✓")
+                    self._vision_support_label.setStyleSheet("color: green; font-weight: bold;")
+                else:
+                    self._vision_support_label.setText("Vision ✗")
+                    self._vision_support_label.setStyleSheet("color: red; font-weight: bold;")
+                return
+
+        self._vision_support_label.setText("N/A")
+        self._vision_support_label.setStyleSheet("color: gray;")
 
     def _on_client_changed(self, _):
         """Handle client selection changes."""
@@ -698,11 +762,17 @@ class ConfigDialog(QDialog):
             field_mappings: Dictionary mapping field names to descriptions
         """
         field_mappings = note_prompts.get("field_mappings", {})
+        create_only_fields = note_prompts.get("create_only_fields", [])
+
         for mapping in list(self._field_mapping_widgets):
             self._remove_specific_mapping(mapping)
 
-        # Add each mapping from the dictionary
+        # Add each mapping from the dictionary, skipping create-only fields
         for prompt_var, note_field in field_mappings.items():
+            # Skip create-only fields in the template tab
+            if prompt_var in create_only_fields:
+                continue
+
             self._create_field_mapping_row(prompt_var=prompt_var, note_field=note_field)
 
         # Update the preview
@@ -1183,7 +1253,8 @@ class ModelFetchWorker(QRunnable):
         socket.setdefaulttimeout(5.0)  # 5 second timeout
 
         try:
-            models = self.client_cls.get_available_models(self.api_key)
+            # Get models (returns a list of dicts with name and vision keys)
+            models = self.client_cls.get_available_models()
             self.signals.result.emit(models)
         except Exception as e:
             self.signals.error.emit(str(e))
