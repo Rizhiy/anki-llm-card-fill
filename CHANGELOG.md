@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.8.0 (2025-05-11)
+
+### Chores
+
+- Add some basic cursor rules
+  ([`ddd2e2a`](https://github.com/Rizhiy/anki-llm-card-fill/commit/ddd2e2ab765644503b84026dfada04e255188e0b))
+
+### Features
+
+- Add model input support
+  ([`f64680d`](https://github.com/Rizhiy/anki-llm-card-fill/commit/f64680d77e6081a7f83ccdd0b05450ede11aecb1))
+
+
 ## v0.7.0 (2025-05-08)
 
 ### Chores
