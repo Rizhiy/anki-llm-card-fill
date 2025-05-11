@@ -1,0 +1,9 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+- We are targeting Python 3.9
+- Use native types when possible, instead of importing from `typing`. e.g. `list` instead of `typing.List`
+- Use `| None` instead of `Optional`
+- Use reST-style docstrings. Don't specify types in docstrings, include types in the signature.

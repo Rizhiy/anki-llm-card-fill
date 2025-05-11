@@ -1,0 +1,10 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+- Keep changes to the minimum, only change code that is required
+- Follow DRY principle, if there is an existing function/method that does something similar, try to use that instead of creating a new version.
+- Write self-explainable code with clear variable and function names. Keep comments to a minimum, only add comments that to explain why you are doing something, not what you are doing.
+- Be terse
+- Use early-return where possible, instead of nesting logic
