@@ -78,7 +78,8 @@ class NoteUpdateWorker(QRunnable):
             # Get template configuration for this note type
             prompt = config_manager.get_prompt_for_update(note_type_name)
             field_mappings = config_manager.get_field_mappings_for_note_type(note_type_name)
-            # Construct prompt
+            create_only_fields = config_manager.get_create_only_fields(note_type_name)
+            field_mappings = {k: v for k, v in field_mappings.items() if k not in create_only_fields}
             filled_prompt = construct_prompt(prompt, field_mappings, dict(self.note.items()))
 
             # Check prompt length
@@ -103,7 +104,6 @@ class NoteUpdateWorker(QRunnable):
                 self.log_and_emit(f"Error parsing response for note {self.note.id}: {field_updates['error']}")
                 return
 
-            # Update fields
             for field_name, content in field_updates.items():
                 if field_name in self.note:
                     self.note[field_name] = content
