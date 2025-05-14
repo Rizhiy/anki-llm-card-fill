@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.8.1 (2025-05-14)
+
+### Bug Fixes
+
+- Don't use create only fields during card update
+  ([`517fb2a`](https://github.com/Rizhiy/anki-llm-card-fill/commit/517fb2a8f88ea533ae3775a55a62013cb49e34b1))
+
+
 ## v0.8.0 (2025-05-11)
 
 ### Chores
