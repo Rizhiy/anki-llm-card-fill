@@ -48,7 +48,7 @@ def parse_llm_response(response: str) -> dict[str, str]:
         except json.JSONDecodeError:
             return {"error": f"Failed to parse JSON from response:\n{response}"}
 
-    return {"error": "No JSON found in response"}
+    return {"error": f"No JSON found in response:\n{response}"}
 
 
 # Source: https://stackoverflow.com/a/47307180/2059584
