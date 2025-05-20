@@ -29,8 +29,10 @@ def construct_prompt(template: str, field_mappings: dict[str, str], card_fields:
     for field in example_fields:
         prompt += f'  "{field}": "Content for {field}",\n'
     prompt += "  ...\n}"
+    # TODO: Make this configurable as well.
     prompt += "\nYour response should be a valid JSON, so I can parse it directly."
     prompt += "\nThe response should contain only one combination."
+    prompt += "\nDon't use newlines inside JSON strings."
 
     return prompt
 
