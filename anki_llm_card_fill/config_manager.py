@@ -53,6 +53,9 @@ class ConfigManager(UserDict):
         :return: The detected schema version
         :raises ValueError: If the version cannot be determined
         """
+        if not self.data:
+            return 0
+
         if "schema_version" in self.data:
             return self.data["schema_version"]
 
@@ -66,13 +69,7 @@ class ConfigManager(UserDict):
         raise ValueError("Unknown config version")
 
     def _migrate_config(self) -> None:
-        """Migrate configuration to the current schema version.
-
-        :raises ValueError: If no configuration is found
-        """
-        if not self.data:
-            raise ValueError("No configuration found")
-
+        """Migrate configuration to the current schema version."""
         schema_version = self._detect_schema_version()
 
         if schema_version == CURRENT_SCHEMA_VERSION:

@@ -104,8 +104,10 @@ def v5(config: dict[str, Any]) -> dict[str, Any]:
         "prompt": global_prompt,
         "field_mappings": field_mappings,
     }
-    del config["global_prompt"]
-    del config["field_mappings"]
+    if config.get("global_prompt"):
+        del config["global_prompt"]
+    if config.get("field_mappings"):
+        del config["field_mappings"]
 
     config["schema_version"] = 5
     return config
