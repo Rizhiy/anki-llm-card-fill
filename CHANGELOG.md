@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.8.2 (2025-07-21)
+
+### Bug Fixes
+
+- Don't crash when loading from empty config
+  ([`2e0ec7a`](https://github.com/Rizhiy/anki-llm-card-fill/commit/2e0ec7a7db3a808b122c12cbf2d763b17da63afb))
+
+### Chores
+
+- Improve error logging
+  ([`6ec3f05`](https://github.com/Rizhiy/anki-llm-card-fill/commit/6ec3f056ae7c9a3d26c727d15f9070f127bc5410))
+
+- Improve JSON format prompt
+  ([`e5306fe`](https://github.com/Rizhiy/anki-llm-card-fill/commit/e5306fe20e781f591a472ad48f10c5f1bd7e05e8))
+
+
 ## v0.8.1 (2025-05-14)
 
 ### Bug Fixes
