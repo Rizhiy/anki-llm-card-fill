@@ -88,3 +88,7 @@ Finally, link/copy the `anki_llm_card_fill` directory to relevant place on your 
 - [ ] Refactor code
 - [ ] Update examples
 - [ ] Change card creation to use thread worker as well and unify with update worker
+- [ ] Add rate limit handling
+- [ ] Add OpenRouter support
+- [ ] Implement Batch API requests
+- [ ] Fix bug where create-only fields disappear after config save.
