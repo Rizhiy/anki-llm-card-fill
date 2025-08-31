@@ -297,3 +297,120 @@ class AnthropicClient(LLMClient):
         :return: URL to get API key
         """
         return "https://console.anthropic.com/settings/keys"
+
+
+class OpenRouterClient(LLMClient):
+    """Client for OpenRouter's API."""
+
+    @classmethod
+    def get_display_name(cls) -> str:
+        """Return the display name for this client.
+
+        :return: Display name
+        """
+        return "OpenRouter"
+
+    def __init__(self, model: str, temperature: float, max_length: int, api_key: str | None = None):
+        super().__init__(model, temperature, max_length, api_key)
+        self._api_url = "https://openrouter.ai/api/v1/chat/completions"
+
+    @classmethod
+    def _get_api_key_from_env(cls) -> str:
+        """Get OpenRouter API key from environment variable.
+
+        :return: API key or empty string if not found
+        """
+        api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not api_key:
+            logger.warning("OpenRouter API key not found in environment variable OPENROUTER_API_KEY")
+        return api_key
+
+    @classmethod
+    def get_available_models(cls) -> list[dict[str, str | bool]]:
+        """Return a list of available OpenRouter models.
+
+        :return: List of model dictionaries with name and image support info
+                 Format: [{"name": "model_name", "vision": bool}, ...]
+        """
+        if cls._models_cache:
+            return cls._models_cache
+
+        try:
+            headers = {
+                "HTTP-Referer": "https://github.com/rizhiy/anki-llm-card-fill",
+                "X-Title": "Anki LLM Card Fill",
+            }
+            request = urllib.request.Request("https://openrouter.ai/api/v1/models", headers=headers)  # noqa: S310
+
+            with urllib.request.urlopen(request) as response:  # noqa: S310
+                data = json.loads(response.read().decode())
+
+            models = []
+            for model in data["data"]:
+                # Check if model supports image input
+                vision = False
+                if "architecture" in model and "input_modalities" in model["architecture"]:
+                    vision = "image" in model["architecture"]["input_modalities"]
+
+                models.append({"name": model["id"], "vision": vision})
+
+            # Sort models alphabetically by name for easier navigation
+            models.sort(key=lambda x: x["name"])
+            cls._models_cache = models
+            return models
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch OpenRouter models: {e}")
+            # Return empty list if API call fails
+            return []
+
+    def __call__(self, prompt: str, images: list[QImage] | None = None) -> str:
+        """Call the OpenRouter API with the prompt and optional images.
+
+        :param prompt: Text prompt to send to the LLM
+        :param images: Optional list of QImage objects to include in the prompt
+        :return: Generated text response from the LLM
+        """
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+            "HTTP-Referer": "https://github.com/rizhiy/anki-llm-card-fill",
+            "X-Title": "Anki LLM Card Fill",
+        }
+
+        if images:
+            # For vision-enabled models, use content array format
+            content = [{"type": "text", "text": prompt}]
+            for image in images:
+                image_data = self._encode_qimage(image)
+                content.append(
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}},
+                )
+            messages = [{"role": "user", "content": content}]
+        else:
+            # For text-only requests, use simple string content
+            messages = [{"role": "user", "content": prompt}]
+
+        data = json.dumps(
+            {
+                "model": self.model,
+                "messages": messages,
+                "max_tokens": self.max_length,
+                "temperature": self.temperature,
+            },
+        ).encode("utf-8")
+
+        request = urllib.request.Request(self._api_url, data=data, headers=headers)  # noqa: S310
+
+        # Let exceptions propagate to the caller
+        with urllib.request.urlopen(request) as response:  # noqa: S310
+            result = json.loads(response.read().decode())
+            return result["choices"][0]["message"]["content"].strip()
+
+    @classmethod
+    def get_api_key_link(cls) -> str:
+        """Return the link to obtain the OpenRouter API key.
+
+        :return: URL to get API key
+        """
+        return "https://openrouter.ai/keys"
