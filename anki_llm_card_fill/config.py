@@ -60,6 +60,16 @@ class ConfigDialog(QDialog):
         self._setup_model_parameters_tab()
         self._setup_templates_tab()
 
+        # Warning message for unsaved config changes (initially hidden)
+        self._config_warning_label = QLabel("⚠️ Configuration needs to saved to take effect on generation!")
+        self._config_warning_label.setWordWrap(True)
+        self._config_warning_label.setStyleSheet(
+            "color: #856404; background-color: #fff3cd; "
+            "border: 1px solid #ffeaa7; padding: 8px; "
+            "border-radius: 4px; font-weight: bold;",
+        )
+        self._layout.addWidget(self._config_warning_label)
+
         # Save and Debug buttons in a horizontal layout
         button_layout = QHBoxLayout()
 
