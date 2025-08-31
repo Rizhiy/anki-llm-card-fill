@@ -232,6 +232,24 @@ def v8(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+def v9(config: dict[str, Any]) -> dict[str, Any]:
+    """Add client-specific rate limiting configuration."""
+    # Initialize client-specific rate limits
+    config["requests_per_minute"] = {
+        "OpenAI": 500,
+        "Anthropic": 50,
+        "OpenRouter": 50,
+    }
+    config["tokens_per_minute"] = {
+        "OpenAI": 30000,
+        "Anthropic": 30000,
+        "OpenRouter": 30000,
+    }
+
+    config["schema_version"] = 9
+    return config
+
+
 # Mapping of version numbers to migration functions
 MIGRATIONS = [
     v1,
@@ -242,7 +260,8 @@ MIGRATIONS = [
     v6,
     v7,
     v8,
+    v9,
 ]
 
 # Current schema version
-CURRENT_SCHEMA_VERSION = 8
+CURRENT_SCHEMA_VERSION = 9

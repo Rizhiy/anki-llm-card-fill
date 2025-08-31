@@ -36,5 +36,11 @@ class TestLLMClientImpl:
         else:
             raise ValueError(f"Unsupported client: {client_cls}")
 
-        client = client_cls(model=model, temperature=0.5, max_length=16)
+        client = client_cls(
+            model=model,
+            temperature=0.5,
+            max_length=16,
+            requests_per_minute=10,
+            tokens_per_minute=1000,
+        )
         assert isinstance(client("Hello"), str)

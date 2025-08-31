@@ -9,5 +9,11 @@
     "models": {
         "OpenAI": "gpt-4.1"
     },
+    "requests_per_minute": {
+        "OpenAI": 500
+    },
+    "tokens_per_minute": {
+        "OpenAI": 30000
+    },
     "note_prompts": {}
 }

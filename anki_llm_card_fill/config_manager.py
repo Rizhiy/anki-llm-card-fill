@@ -108,6 +108,22 @@ class ConfigManager(UserDict):
         """
         return self["models"].get(client_name, "")
 
+    def get_requests_per_minute_for_client(self, client_name: str) -> int:
+        """Get the requests per minute limit for a specific client.
+
+        :param client_name: The name of the client to get the limit for
+        :return: The requests per minute limit or default value if not found
+        """
+        return self["requests_per_minute"].get(client_name, 0)
+
+    def get_tokens_per_minute_for_client(self, client_name: str) -> int:
+        """Get the tokens per minute limit for a specific client.
+
+        :param client_name: The name of the client to get the limit for
+        :return: The tokens per minute limit or default value if not found
+        """
+        return self["tokens_per_minute"].get(client_name, 0)
+
     def validate_settings(self, note_type: str, *, prompt_type: Literal["update", "create"] = "update") -> None:
         """Validate that required settings have been configured for a specific note type.
 
@@ -121,6 +137,12 @@ class ConfigManager(UserDict):
 
         if not self.get_api_key_for_client(client):
             raise ValueError("API key not configured")
+
+        if not self.get_requests_per_minute_for_client(client):
+            raise ValueError("Request per minute not configured")
+
+        if not self.get_tokens_per_minute_for_client(client):
+            raise ValueError("Tokens per minute not configured")
 
         if not self.get_note_type_config(note_type):
             raise ValueError("Note type config not configured")

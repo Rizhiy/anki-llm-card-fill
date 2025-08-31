@@ -170,6 +170,31 @@ class ConfigDialog(QDialog):
         self._openrouter_warning.setVisible(False)  # Initially hidden
         self._general_layout.addRow(self._openrouter_warning)
 
+        # Rate limiting settings
+        self._requests_per_minute_label = QLabel("Requests per minute:")
+        self._requests_per_minute_label.setToolTip(
+            "Maximum number of API requests allowed per minute for the selected client",
+        )
+        self._requests_per_minute_input = QSpinBox()
+        self._requests_per_minute_input.setRange(1, 1000)
+        self._requests_per_minute_input.setValue(60)
+        self._general_layout.addRow(
+            self._requests_per_minute_label,
+            self._requests_per_minute_input,
+        )
+
+        self._tokens_per_minute_label = QLabel("Tokens per minute:")
+        self._tokens_per_minute_label.setToolTip(
+            "Maximum number of tokens (approximate) allowed per minute for the selected client",
+        )
+        self._tokens_per_minute_input = QSpinBox()
+        self._tokens_per_minute_input.setRange(1000, 1_000_000)
+        self._tokens_per_minute_input.setValue(60_000)
+        self._general_layout.addRow(
+            self._tokens_per_minute_label,
+            self._tokens_per_minute_input,
+        )
+
         # Add shortcut configuration
         self._shortcut_label = QLabel("Keyboard shortcut for updating cards:")
         self._shortcut_input = QLineEdit()
@@ -389,6 +414,12 @@ class ConfigDialog(QDialog):
         self._max_length_input.setValue(max_length)
         self._max_prompt_tokens_input.setValue(max_prompt_tokens)
 
+        # Set rate limiting parameters for current client
+        requests_per_minute = self._config_manager.get_requests_per_minute_for_client(client_name)
+        tokens_per_minute = self._config_manager.get_tokens_per_minute_for_client(client_name)
+        self._requests_per_minute_input.setValue(requests_per_minute)
+        self._tokens_per_minute_input.setValue(tokens_per_minute)
+
         # Get API key for the current client
         api_key = self._config_manager.get_api_key_for_client(client_name)
         if api_key:
@@ -553,6 +584,14 @@ class ConfigDialog(QDialog):
         # Update the API key field if we have a key for this client
         if api_key:
             self._api_key_input.setText(self._shorten_key(api_key))
+        else:
+            self._api_key_input.setText("")
+
+        # Update rate limits for the new client
+        requests_per_minute = self._config_manager.get_requests_per_minute_for_client(client_name)
+        tokens_per_minute = self._config_manager.get_tokens_per_minute_for_client(client_name)
+        self._requests_per_minute_input.setValue(requests_per_minute)
+        self._tokens_per_minute_input.setValue(tokens_per_minute)
 
         # Update the model list for the new client
         self._update_model_list()
@@ -578,6 +617,8 @@ class ConfigDialog(QDialog):
 
         api_keys = self._config_manager.get("api_keys", {})
         models = self._config_manager.get("models", {})
+        requests_per_minute = self._config_manager.get("requests_per_minute", {})
+        tokens_per_minute = self._config_manager.get("tokens_per_minute", {})
 
         # If current key input is the shortened version, get the actual key
         api_key = self._api_key_input.text()
@@ -589,6 +630,10 @@ class ConfigDialog(QDialog):
 
         if model_name := self._model_selector.currentText():
             models[client_name] = model_name
+
+        # Update rate limits for the current client
+        requests_per_minute[client_name] = self._requests_per_minute_input.value()
+        tokens_per_minute[client_name] = self._tokens_per_minute_input.value()
 
         # Update the config with all values
         self._config_manager.update(config)
@@ -1014,6 +1059,8 @@ class DebugDialog(QDialog):
         # Get the API key and model using self._config_manager methods
         api_key = self._config_manager.get_api_key_for_client(client_name)
         model_name = self._config_manager.get_model_for_client(client_name)
+        requests_per_minute = self._config_manager.get_requests_per_minute_for_client(client_name)
+        tokens_per_minute = self._config_manager.get_tokens_per_minute_for_client(client_name)
 
         temperature = self._config_manager["temperature"]
         max_length = self._config_manager["max_length"]
@@ -1030,6 +1077,8 @@ class DebugDialog(QDialog):
             temperature,
             max_length,
             prompt,
+            requests_per_minute,
+            tokens_per_minute,
         )
 
         # Connect signals
@@ -1070,6 +1119,8 @@ class DebugLLMWorker(QRunnable):
         temperature,
         max_length,
         prompt,
+        requests_per_minute,
+        tokens_per_minute,
     ):
         super().__init__()
         self.client_name = client_name
@@ -1078,6 +1129,8 @@ class DebugLLMWorker(QRunnable):
         self.temperature = temperature
         self.max_length = max_length
         self.prompt = prompt
+        self.requests_per_minute = requests_per_minute
+        self.tokens_per_minute = tokens_per_minute
         self.signals = DebugWorkerSignals()
 
     def run(self):
@@ -1088,6 +1141,8 @@ class DebugLLMWorker(QRunnable):
                 model=self.model_name,
                 temperature=self.temperature,
                 max_length=self.max_length,
+                requests_per_minute=self.requests_per_minute,
+                tokens_per_minute=self.tokens_per_minute,
             )
 
             response = client(self.prompt)

@@ -92,3 +92,4 @@ Finally, link/copy the `anki_llm_card_fill` directory to relevant place on your 
 - [ ] Add OpenRouter support
 - [ ] Implement Batch API requests
 - [ ] Fix bug where create-only fields disappear after config save.
+- [ ] Refactor how llm clients are configured

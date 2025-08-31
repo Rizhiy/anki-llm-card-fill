@@ -500,18 +500,17 @@ class CardCreationDialog(QDialog):
 
         client_name = self._config_manager["client"]
         model_name = self._config_manager.get_model_for_client(client_name)
-        api_key = self._config_manager.get_api_key_for_client(client_name)
-        temperature = self._config_manager["temperature"]
-        max_length = self._config_manager["max_length"]
 
         client_cls = LLMClient.get_client(client_name)
 
         try:
             client = client_cls(
                 model=model_name,
-                temperature=temperature,
-                max_length=max_length,
-                api_key=api_key,
+                temperature=self._config_manager["temperature"],
+                max_length=self._config_manager["max_length"],
+                api_key=self._config_manager.get_api_key_for_client(client_name),
+                requests_per_minute=self._config_manager.get_requests_per_minute_for_client(client_name),
+                tokens_per_minute=self._config_manager.get_tokens_per_minute_for_client(client_name),
             )
 
             tooltip("Calling LLM...")

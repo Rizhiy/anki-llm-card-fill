@@ -69,10 +69,6 @@ class NoteUpdateWorker(QRunnable):
 
             # Get LLM client configuration
             client_name = config_manager["client"]
-            model_name = config_manager.get_model_for_client(client_name)
-            api_key = config_manager.get_api_key_for_client(client_name)
-            temperature = config_manager["temperature"]
-            max_length = config_manager["max_length"]
             max_prompt_tokens = config_manager["max_prompt_tokens"]
 
             # Get template configuration for this note type
@@ -93,7 +89,14 @@ class NoteUpdateWorker(QRunnable):
 
             # Initialize LLM client
             client_cls = LLMClient.get_client(client_name)
-            client = client_cls(model=model_name, temperature=temperature, max_length=max_length, api_key=api_key)
+            client = client_cls(
+                model=config_manager.get_model_for_client(client_name),
+                temperature=config_manager["temperature"],
+                max_length=config_manager["max_length"],
+                api_key=config_manager.get_api_key_for_client(client_name),
+                requests_per_minute=config_manager.get_requests_per_minute_for_client(client_name),
+                tokens_per_minute=config_manager.get_tokens_per_minute_for_client(client_name),
+            )
 
             # Call LLM
             response = client(filled_prompt)

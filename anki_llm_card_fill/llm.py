@@ -12,6 +12,8 @@ from pathlib import Path
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
+from .rate_limiter import RateLimiter
+
 if TYPE_CHECKING:
     from aqt.qt import QImage
 
@@ -26,6 +28,8 @@ class LLMClient(ABC):
 
     _registry = {}
     _models_cache = None
+    _request_limiter: RateLimiter = None
+    _token_limiter: RateLimiter = None
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -35,7 +39,19 @@ class LLMClient(ABC):
             raise ValueError(f"Duplicate display name: {client_name}")
         cls._registry[client_name] = cls
 
-    def __init__(self, model: str, temperature: float, max_length: int, api_key: str | None = None):
+        # Initialize class-level rate limiters with defaults
+        cls._request_limiter = RateLimiter(limit=10)
+        cls._token_limiter = RateLimiter(limit=1000)
+
+    def __init__(
+        self,
+        model: str,
+        temperature: float,
+        max_length: int,
+        api_key: str | None = None,
+        requests_per_minute: int = 60,
+        tokens_per_minute: int = 60000,
+    ):
         self.api_key = api_key or self._get_api_key_from_env()
         if not self.api_key:
             msg = f"""\
@@ -46,10 +62,39 @@ class LLMClient(ABC):
         self.temperature = temperature
         self.max_length = max_length
 
+        # Update class-level rate limiters with current settings
+        self._request_limiter.update_limit(requests_per_minute)
+        self._token_limiter.update_limit(tokens_per_minute)
+
     @classmethod
     @abstractmethod
     def get_display_name(cls) -> str:
         """Return the display name for the client."""
+
+    def _estimate_tokens(self, prompt: str, images: list[QImage] | None = None) -> int:
+        """Estimate token count for the request.
+
+        :param prompt: Text prompt
+        :param images: Optional images
+        :return: Estimated token count
+        """
+        # Simple estimation: ~4 characters per token for text
+        token_count = len(prompt) // 4
+
+        # Add tokens for images (rough estimate)
+        if images:
+            token_count += len(images) * 1024
+
+        return max(1, token_count)
+
+    def _apply_rate_limits(self, prompt: str, images: list[QImage] | None = None) -> None:
+        """Apply rate limits before making API call.
+
+        :param prompt: Text prompt
+        :param images: Optional images
+        """
+        self._request_limiter.acquire()
+        self._token_limiter.acquire(self._estimate_tokens(prompt, images))
 
     @abstractmethod
     def __call__(self, prompt: str, images: list[QImage] | None = None) -> str:
@@ -127,8 +172,16 @@ class OpenAIClient(LLMClient):
         """
         return "OpenAI"
 
-    def __init__(self, model: str, temperature: float, max_length: int, api_key: str | None = None):
-        super().__init__(model, temperature, max_length, api_key)
+    def __init__(
+        self,
+        model: str,
+        temperature: float,
+        max_length: int,
+        api_key: str | None = None,
+        requests_per_minute: int = 60,
+        tokens_per_minute: int = 60000,
+    ):
+        super().__init__(model, temperature, max_length, api_key, requests_per_minute, tokens_per_minute)
 
     @classmethod
     def _get_api_key_from_env(cls) -> str:
@@ -164,6 +217,8 @@ class OpenAIClient(LLMClient):
         :param images: Optional list of QImage objects to include in the prompt
         :return: Generated text response from the LLM
         """
+        self._apply_rate_limits(prompt, images)
+
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
 
         api_url = "https://api.openai.com/v1/chat/completions"
@@ -218,8 +273,16 @@ class AnthropicClient(LLMClient):
         """
         return "Anthropic"
 
-    def __init__(self, model: str, temperature: float, max_length: int, api_key: str | None = None):
-        super().__init__(model, temperature, max_length, api_key)
+    def __init__(
+        self,
+        model: str,
+        temperature: float,
+        max_length: int,
+        api_key: str | None = None,
+        requests_per_minute: int = 60,
+        tokens_per_minute: int = 60000,
+    ):
+        super().__init__(model, temperature, max_length, api_key, requests_per_minute, tokens_per_minute)
         self._api_url = "https://api.anthropic.com/v1/messages"
 
     @classmethod
@@ -256,6 +319,8 @@ class AnthropicClient(LLMClient):
         :param images: Optional list of QImage objects to include in the prompt
         :return: Generated text response from the LLM
         """
+        self._apply_rate_limits(prompt, images)
+
         headers = {"Content-Type": "application/json", "x-api-key": self.api_key, "anthropic-version": "2023-06-01"}
 
         content = [{"type": "text", "text": prompt}]
@@ -310,8 +375,16 @@ class OpenRouterClient(LLMClient):
         """
         return "OpenRouter"
 
-    def __init__(self, model: str, temperature: float, max_length: int, api_key: str | None = None):
-        super().__init__(model, temperature, max_length, api_key)
+    def __init__(
+        self,
+        model: str,
+        temperature: float,
+        max_length: int,
+        api_key: str | None = None,
+        requests_per_minute: int = 60,
+        tokens_per_minute: int = 60000,
+    ):
+        super().__init__(model, temperature, max_length, api_key, requests_per_minute, tokens_per_minute)
         self._api_url = "https://openrouter.ai/api/v1/chat/completions"
 
     @classmethod
@@ -371,6 +444,8 @@ class OpenRouterClient(LLMClient):
         :param images: Optional list of QImage objects to include in the prompt
         :return: Generated text response from the LLM
         """
+        self._apply_rate_limits(prompt, images)
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
