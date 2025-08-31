@@ -819,6 +819,15 @@ class ConfigDialog(QDialog):
         # Get existing config or create a new one
         note_type_config = note_prompts.get(self._current_note_type, {})
 
+        # Preserve create-only fields by adding them back to field_mappings
+        existing_field_mappings = note_type_config.get("field_mappings", {})
+        create_only_fields = note_type_config.get("create_only_fields", [])
+
+        # Add create-only fields back to the new field mappings
+        for field in create_only_fields:
+            if field in existing_field_mappings:
+                field_mappings[field] = existing_field_mappings[field]
+
         # Update with new values
         note_type_config.update(
             {
