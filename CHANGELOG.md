@@ -1,6 +1,41 @@
 # CHANGELOG
 
 
+## v0.9.0 (2025-09-01)
+
+### Bug Fixes
+
+- Fix create only fields being removed when updating the config
+  ([`6d4586b`](https://github.com/Rizhiy/anki-llm-card-fill/commit/6d4586bd53ac679c54a0eb2e1a1e41907ca9f0b2))
+
+- Improve wording regarding newlines
+  ([`ae690c3`](https://github.com/Rizhiy/anki-llm-card-fill/commit/ae690c387aea0a8f9878abefb27daca158be4b9f))
+
+### Chores
+
+- Add a warning about saving the config
+  ([`bf899fe`](https://github.com/Rizhiy/anki-llm-card-fill/commit/bf899fe19899010d4689441dac4713f7ee1c5345))
+
+- Add warning about OpenRouter
+  ([`3aa25fb`](https://github.com/Rizhiy/anki-llm-card-fill/commit/3aa25fb21fb0d18af7b2b4514d36418f439a303b))
+
+- Update model list
+  ([`0543c6c`](https://github.com/Rizhiy/anki-llm-card-fill/commit/0543c6c01d50c252af62e4f48b042e0cd66d7b5a))
+
+### Documentation
+
+- Add link to addon in the readme
+  ([`a58af77`](https://github.com/Rizhiy/anki-llm-card-fill/commit/a58af77bf79ec3eea1b9c437078ab355c97803aa))
+
+### Features
+
+- Add OpenRouter client
+  ([`7ba4082`](https://github.com/Rizhiy/anki-llm-card-fill/commit/7ba408287dac9bacd0176eeea8a45def6e9d87c3))
+
+- Add rate limiting as well
+  ([`a1ec846`](https://github.com/Rizhiy/anki-llm-card-fill/commit/a1ec8468f426c2781f2d9c105279eff981a96f5b))
+
+
 ## v0.8.2 (2025-07-21)
 
 ### Bug Fixes
