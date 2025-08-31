@@ -146,6 +146,20 @@ class ConfigDialog(QDialog):
         self._api_key_link.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._general_layout.addRow(self._api_key_link)
 
+        # OpenRouter warning (initially hidden)
+        self._openrouter_warning = QLabel(
+            "<b>⚠️ Advanced Client Warning:</b> OpenRouter provides access to many models, "
+            "but some models like reasoning-only models (e.g., gpt-5, gemini-2.5-pro) "
+            "may not work with this addon due to API compatibility differences.",
+        )
+        self._openrouter_warning.setWordWrap(True)
+        self._openrouter_warning.setStyleSheet(
+            "color: #d97700; font-size: 11px; background-color: #fff3cd; "
+            "padding: 8px; border: 1px solid #ffc107; border-radius: 4px; margin: 5px 0;",
+        )
+        self._openrouter_warning.setVisible(False)  # Initially hidden
+        self._general_layout.addRow(self._openrouter_warning)
+
         # Add shortcut configuration
         self._shortcut_label = QLabel("Keyboard shortcut for updating cards:")
         self._shortcut_input = QLineEdit()
@@ -516,6 +530,12 @@ class ConfigDialog(QDialog):
         self._api_key_link.setText(
             f'<a href="{api_key_link}">Get your {client_name} API key</a>',
         )
+
+        # Show/hide OpenRouter warning
+        if client_name == "OpenRouter":
+            self._openrouter_warning.setVisible(True)
+        else:
+            self._openrouter_warning.setVisible(False)
 
         # Get API key for the new client
         api_key = self._config_manager.get_api_key_for_client(client_name)
