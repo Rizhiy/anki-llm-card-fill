@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import TYPE_CHECKING
 
 from aqt import mw
@@ -199,14 +200,21 @@ def update_browser_notes(browser: Browser) -> None:
         showInfo("No notes selected.")
         return
 
+    config_manager = ConfigManager()
+    client_name = config_manager["client"]
+    requests_per_minute = config_manager.get_requests_per_minute_for_client(client_name)
     notes = [mw.col.get_note(nid) for nid in selected_nids]
 
     # Ask for confirmation if many notes selected
-    if len(notes) > 5:
+    if len(notes) > min(10, requests_per_minute):
+        msg = f"Do you want to update {len(notes)} notes with LLM content?"
+        if len(notes) > requests_per_minute:
+            expected_minutes = math.floor(len(notes) / requests_per_minute)
+            msg += f" This is expected to take about {expected_minutes} minutes."
         confirm = QMessageBox.question(
             browser,
             "Confirm Bulk Update",
-            f"Do you want to update {len(notes)} notes with LLM content? This may take a while and use API credits.",
+            msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if confirm != QMessageBox.StandardButton.Yes:
@@ -237,6 +245,7 @@ def process_notes_in_parallel(notes: list[Note]) -> None:
     progress.setWindowModality(Qt.WindowModality.ApplicationModal)
     progress.setMinimumDuration(0)  # Show immediately
     progress.setValue(0)
+    progress.setAutoClose(True)
 
     # Create signal handler
     signals = NoteProcessSignals()
@@ -260,7 +269,6 @@ def process_notes_in_parallel(notes: list[Note]) -> None:
                 tooltip(f"Successfully updated all {total_notes} notes!")
             else:
                 tooltip(f"Updated {success_count} of {total_notes} notes. Check logs for errors.")
-            progress.close()
 
     def on_note_error(error):
         nonlocal error_msgs
@@ -288,9 +296,3 @@ def process_notes_in_parallel(notes: list[Note]) -> None:
             break
         worker = NoteUpdateWorker(note, signals)
         pool.start(worker)
-
-    # Create a local event loop
-    while completed < total_notes and not canceled:
-        QApplication.processEvents()
-        if progress.wasCanceled() and not canceled:
-            on_canceled()
