@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.9.1 (2025-09-02)
+
+### Bug Fixes
+
+- Fix bulk update final message and improve warning
+  ([`7db6a4e`](https://github.com/Rizhiy/anki-llm-card-fill/commit/7db6a4eb1b747a357ff2cdb6627ab4a7eb1888bb))
+
+### Documentation
+
+- Update todo
+  ([`66be292`](https://github.com/Rizhiy/anki-llm-card-fill/commit/66be2925084896a1b6d33c8c65ed623a5ad0665f))
+
+
 ## v0.9.0 (2025-09-01)
 
 ### Bug Fixes
