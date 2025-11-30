@@ -1,3 +1,5 @@
+set -ex
+
 cwd="$(basename $(pwd))"
 
 if [ "$cwd" != "anki-llm-card-fill" ]; then

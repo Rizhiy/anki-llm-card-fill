@@ -93,3 +93,4 @@ Finally, link/copy the `anki_llm_card_fill` directory to relevant place on your 
 - [ ] Implement Batch API requests
 - [x] Fix bug where create-only fields disappear after config save.
 - [ ] Refactor how llm clients are configured
+- [ ] Add option to run llm complete on card addition
