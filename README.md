@@ -1,6 +1,6 @@
 # Anki LLM Card Fill
 
-[Addon Page](https://ankiweb.net/shared/info/2043082246?cb=1753055998095)
+[Addon Page](https://ankiweb.net/shared/info/2043082246)
 
 ## Example usage
 
