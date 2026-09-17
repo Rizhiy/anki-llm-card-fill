@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import os
+import secrets
 import tempfile
 import urllib.error
 import urllib.request
@@ -90,6 +91,12 @@ class LLMClient(ABC):
             token_count += len(images) * 1024
 
         return max(1, token_count)
+
+    @staticmethod
+    def _randomize_prompt(prompt: str) -> str:
+        # ponytail: a nonce encourages variety, not uniqueness; add history if deduplication is needed.
+        # Six decimal digits take only two tokens in common tokenizers; keep the prefix cacheable.
+        return f"{prompt}\n\nUse variation {secrets.randbelow(1000000):06d}; omit this code."
 
     def _apply_rate_limits(self, prompt: str, images: list[QImage] | None = None) -> None:
         """Apply rate limits before making API call.
@@ -330,6 +337,7 @@ class OpenAIClient(LLMClient):
         :param images: Optional list of QImage objects to include in the prompt
         :return: Generated text response from the LLM
         """
+        prompt = self._randomize_prompt(prompt)
         self._apply_rate_limits(prompt, images)
 
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
@@ -472,6 +480,7 @@ class AnthropicClient(LLMClient):
         :param images: Optional list of QImage objects to include in the prompt
         :return: Generated text response from the LLM
         """
+        prompt = self._randomize_prompt(prompt)
         self._apply_rate_limits(prompt, images)
 
         headers = {"Content-Type": "application/json", "x-api-key": self.api_key, "anthropic-version": "2023-06-01"}
@@ -654,6 +663,7 @@ class OpenRouterClient(LLMClient):
         :param images: Optional list of QImage objects to include in the prompt
         :return: Generated text response from the LLM
         """
+        prompt = self._randomize_prompt(prompt)
         self._apply_rate_limits(prompt, images)
 
         headers = {

@@ -173,3 +173,6 @@ cython_debug/
 # this project
 anki_llm_card_fill/meta.json
 *.ankiaddon
+
+# pi harness
+/.pi
