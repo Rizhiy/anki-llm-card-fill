@@ -1,5 +1,7 @@
 """Configuration management for the Anki LLM Card Fill addon."""
 
+from __future__ import annotations
+
 import copy
 import logging
 from collections import UserDict
@@ -7,6 +9,7 @@ from typing import Any, Literal
 
 from aqt import mw
 
+from .llm import LLMClient
 from .migrations import CURRENT_SCHEMA_VERSION, MIGRATIONS
 
 logger = logging.getLogger(__name__)
@@ -107,6 +110,13 @@ class ConfigManager(UserDict):
         :return: The model name for the client or empty string if not found
         """
         return self["models"].get(client_name, "")
+
+    def get_model_parameters(self, client_name: str, model: str | None = None) -> dict[str, Any]:
+        """Return independent defaults plus remembered settings for this provider/model."""
+        model = model or self.get_model_for_client(client_name)
+        defaults = LLMClient.get_client(client_name).default_parameters(model)
+        saved = self.get("model_parameters", {}).get(client_name, {}).get(model, {})
+        return {key: saved.get(key, value) for key, value in defaults.items()}
 
     def get_requests_per_minute_for_client(self, client_name: str) -> int:
         """Get the requests per minute limit for a specific client.
@@ -265,7 +275,7 @@ class ConfigManager(UserDict):
             create_only_fields.remove(field_name)
             self.update_note_type_config(note_type, "create_only_fields", create_only_fields)
 
-    def get_preferred_deck_name(self, note_type: str) -> str:
+    def get_preferred_deck_name(self, note_type: str) -> str | None:
         """Get the preferred deck name for a specific note type.
 
         :param note_type: The name of the note type

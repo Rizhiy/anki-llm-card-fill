@@ -1,5 +1,5 @@
 from aqt import QKeySequence, gui_hooks, mw
-from aqt.browser import Browser
+from aqt.browser.browser import Browser
 from aqt.qt import QAction, QMenu, qconnect
 
 from .card_creator import open_card_creation_dialog
@@ -68,7 +68,8 @@ def on_browser_context_menu(browser: Browser, menu: QMenu) -> None:
     # Create and add the action
     action_text = f"Fill {len(selected_notes)} note(s) with LLM"
     action = menu.addAction(action_text)
-    qconnect(action.triggered, lambda: update_browser_notes(browser))
+    if action is not None:
+        qconnect(action.triggered, lambda: update_browser_notes(browser))
 
 
 # Connect to browser context menu hook

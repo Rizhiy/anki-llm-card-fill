@@ -6,43 +6,282 @@
         },
         {
             "name": "gpt-4-turbo",
-            "vision": false
+            "vision": true,
+            "max_output_tokens": 4096
         },
         {
             "name": "gpt-4o",
-            "vision": true
+            "vision": true,
+            "max_output_tokens": 16384
         },
         {
             "name": "gpt-4o-mini",
-            "vision": true
+            "vision": true,
+            "max_output_tokens": 16384
         },
         {
             "name": "gpt-4.1",
-            "vision": true
+            "vision": true,
+            "max_output_tokens": 32768
         },
         {
             "name": "gpt-4.1-mini",
-            "vision": true
+            "vision": true,
+            "max_output_tokens": 32768
         },
         {
             "name": "o1",
-            "vision": true
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "low",
+                "medium",
+                "high"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 100000
         },
         {
             "name": "o1-mini",
-            "vision": false
+            "vision": false,
+            "temperature": false,
+            "max_output_tokens": 65536
         },
         {
             "name": "o3",
-            "vision": true
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "low",
+                "medium",
+                "high"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 100000
         },
         {
             "name": "o3-mini",
-            "vision": false
+            "vision": false,
+            "temperature": false,
+            "reasoning_efforts": [
+                "low",
+                "medium",
+                "high"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 100000
         },
         {
             "name": "o4-mini",
-            "vision": true
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "low",
+                "medium",
+                "high"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 100000
+        },
+        {
+            "name": "gpt-4.1-nano",
+            "vision": true,
+            "max_output_tokens": 32768
+        },
+        {
+            "name": "gpt-5",
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "minimal",
+                "low",
+                "medium",
+                "high"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5-mini",
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "minimal",
+                "low",
+                "medium",
+                "high"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5-nano",
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "minimal",
+                "low",
+                "medium",
+                "high"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5.1",
+            "vision": true,
+            "temperature": "none",
+            "reasoning_efforts": [
+                "none",
+                "low",
+                "medium",
+                "high"
+            ],
+            "default_effort": "none",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5.2",
+            "vision": true,
+            "temperature": "none",
+            "reasoning_efforts": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+            ],
+            "default_effort": "none",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5.4",
+            "vision": true,
+            "temperature": "none",
+            "reasoning_efforts": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+            ],
+            "default_effort": "none",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5.4-mini",
+            "vision": true,
+            "temperature": "none",
+            "reasoning_efforts": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+            ],
+            "default_effort": "none",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5.4-nano",
+            "vision": true,
+            "temperature": "none",
+            "reasoning_efforts": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+            ],
+            "default_effort": "none",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5.5",
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5.5-pro",
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "medium",
+                "high",
+                "xhigh"
+            ],
+            "default_effort": "high",
+            "max_output_tokens": 128000,
+            "responses_api": true
+        },
+        {
+            "name": "gpt-5.6",
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5.6-sol",
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5.6-terra",
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "gpt-5.6-luna",
+            "vision": true,
+            "temperature": false,
+            "reasoning_efforts": [
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+            ],
+            "default_effort": "medium",
+            "max_output_tokens": 128000
         }
     ]
 }

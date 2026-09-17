@@ -123,6 +123,8 @@ def v6(config: dict[str, Any]) -> dict[str, Any]:
     note_prompts = config["note_prompts"]
     default_config = note_prompts.get(DEFAULT_NOTE_TYPE, {})
 
+    if mw.col is None:
+        raise ValueError("No Anki collection is open")
     try:
         note_types = mw.col.models.all_names()
     except Exception as e:
@@ -136,7 +138,7 @@ def v6(config: dict[str, Any]) -> dict[str, Any]:
         def __init__(self):
             super().__init__(mw)
             self.setWindowTitle("LLM Card Fill - Select Note Type")
-            self.layout = QVBoxLayout()
+            layout = QVBoxLayout()
 
             # Add explanation with add-on name
             explanation = QLabel(
@@ -145,13 +147,13 @@ def v6(config: dict[str, Any]) -> dict[str, Any]:
                 "Please select the note type you want to use with LLM Card Fill:",
             )
             explanation.setWordWrap(True)
-            self.layout.addWidget(explanation)
+            layout.addWidget(explanation)
 
             # Add note type selector
             self.selector = QComboBox()
             for note_type in note_types:
                 self.selector.addItem(note_type)
-            self.layout.addWidget(self.selector)
+            layout.addWidget(self.selector)
 
             # Add explanation of what's happening
             migration_info = QLabel(
@@ -160,7 +162,7 @@ def v6(config: dict[str, Any]) -> dict[str, Any]:
                 "be migrated to the selected note type.",
             )
             migration_info.setWordWrap(True)
-            self.layout.addWidget(migration_info)
+            layout.addWidget(migration_info)
 
             # Add buttons
             button_layout = QHBoxLayout()
@@ -171,9 +173,9 @@ def v6(config: dict[str, Any]) -> dict[str, Any]:
 
             button_layout.addWidget(self.ok_button)
             button_layout.addWidget(self.cancel_button)
-            self.layout.addLayout(button_layout)
+            layout.addLayout(button_layout)
 
-            self.setLayout(self.layout)
+            self.setLayout(layout)
 
     dialog = NoteTypeSelectDialog()
     result = dialog.exec()
@@ -250,6 +252,21 @@ def v9(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
+def v10(config: dict[str, Any]) -> dict[str, Any]:
+    """Remember generation parameters per provider and model without overwriting saved values."""
+    parameters = config.setdefault("model_parameters", {})
+    legacy = {key: config[key] for key in ("temperature", "max_length") if key in config}
+    for client, model in config.get("models", {}).items():
+        if model:
+            saved = parameters.setdefault(client, {}).setdefault(model, {})
+            for key, value in legacy.items():
+                saved.setdefault(key, value)
+    config.pop("temperature", None)
+    config.pop("max_length", None)
+    config["schema_version"] = 10
+    return config
+
+
 # Mapping of version numbers to migration functions
 MIGRATIONS = [
     v1,
@@ -261,7 +278,8 @@ MIGRATIONS = [
     v7,
     v8,
     v9,
+    v10,
 ]
 
 # Current schema version
-CURRENT_SCHEMA_VERSION = 9
+CURRENT_SCHEMA_VERSION = 10

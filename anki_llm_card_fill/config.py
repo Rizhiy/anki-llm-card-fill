@@ -1,7 +1,6 @@
-import socket
-import threading
+import copy
 from collections import defaultdict
-from typing import Any
+from typing import Any, cast
 
 from aqt import mw
 from aqt.qt import (
@@ -35,12 +34,13 @@ from .utils import construct_prompt
 
 
 class ConfigDialog(QDialog):
-    # Class-level lock to prevent multiple model update operations
-    _model_update_lock = threading.Lock()
-
     def __init__(self):
         super().__init__()
         self._config_manager = ConfigManager()
+        self._model_parameters = copy.deepcopy(self._config_manager.get("model_parameters", {}))
+        self._selected_models = dict(self._config_manager.get("models", {}))
+        self._active_parameter_model = None
+        self._model_request_id = 0
         self.setWindowTitle("Configure LLM Card Fill")
 
         # Create main layout
@@ -158,9 +158,8 @@ class ConfigDialog(QDialog):
 
         # OpenRouter warning (initially hidden)
         self._openrouter_warning = QLabel(
-            "<b>⚠️ Advanced Client Warning:</b> OpenRouter provides access to many models, "
-            "but some models like reasoning-only models (e.g., gpt-5, gemini-2.5-pro) "
-            "may not work with this addon due to API compatibility differences.",
+            "OpenRouter parameters are based on the model catalog. Availability and limits "
+            "may also depend on the upstream provider selected by OpenRouter.",
         )
         self._openrouter_warning.setWordWrap(True)
         self._openrouter_warning.setStyleSheet(
@@ -211,36 +210,95 @@ class ConfigDialog(QDialog):
         self._tab_widget.addTab(self._general_tab, "General")
 
     def _setup_model_parameters_tab(self):
-        # Model parameters tab
         self._params_tab = QWidget()
         self._params_layout = QFormLayout(self._params_tab)
-
-        # Temperature setting
-        self._temperature_label = QLabel("Temperature:")
         self._temperature_input = QDoubleSpinBox()
-        self._temperature_input.setRange(0.0, 1.0)
+        self._temperature_input.setRange(0.0, 2.0)
         self._temperature_input.setSingleStep(0.01)
-        self._params_layout.addRow(self._temperature_label, self._temperature_input)
-
-        # Max length setting
-        self._max_length_label = QLabel("Max Response Length (tokens):")
         self._max_length_input = QSpinBox()
-        self._max_length_input.setRange(1, 4096)
-        self._params_layout.addRow(self._max_length_label, self._max_length_input)
-
-        # Add max prompt tokens setting
-        self._max_prompt_tokens_label = QLabel("Max Prompt Length (tokens):")
-        self._max_prompt_tokens_label.setToolTip(
-            "Limit the maximum length of prompts to avoid excessive token usage",
+        self._max_length_input.setRange(1, 2000000)
+        self._reasoning_effort_input = QComboBox()
+        self._thinking_budget_input = QSpinBox()
+        self._thinking_budget_input.setRange(0, 2000000)
+        self._thinking_budget_input.setSpecialValueText("Off / use effort")
+        self._thinking_budget_input.setToolTip(
+            "0 uses effort (if supported), otherwise disables thinking. A positive budget must be at least "
+            "1024 tokens and less than Max Response Length.",
         )
+        self._max_length_input.setToolTip(
+            "Total output token limit, including thinking. Increase this if reasoning leaves no room for the answer.",
+        )
+        self._parameter_inputs = {
+            "temperature": self._temperature_input,
+            "max_length": self._max_length_input,
+            "reasoning_effort": self._reasoning_effort_input,
+            "thinking_budget": self._thinking_budget_input,
+        }
+        for label, widget in zip(
+            (
+                "Temperature:",
+                "Max Response Length (tokens):",
+                "Thinking / reasoning effort:",
+                "Thinking budget (tokens):",
+            ),
+            self._parameter_inputs.values(),
+        ):
+            self._params_layout.addRow(label, widget)
+        self._reasoning_effort_input.currentIndexChanged.connect(self._refresh_parameter_visibility)
+        self._thinking_budget_input.valueChanged.connect(self._refresh_parameter_visibility)
+
         self._max_prompt_tokens_input = QSpinBox()
         self._max_prompt_tokens_input.setRange(1, 4096)
-        self._params_layout.addRow(
-            self._max_prompt_tokens_label,
-            self._max_prompt_tokens_input,
-        )
-
+        self._params_layout.addRow("Max Prompt Length (tokens):", self._max_prompt_tokens_input)
         self._tab_widget.addTab(self._params_tab, "Request Parameters")
+
+    def _parameter_values(self):
+        return {
+            name: widget.currentText() or None if isinstance(widget, QComboBox) else widget.value()
+            for name, widget in self._parameter_inputs.items()
+        }
+
+    def _store_model_parameters(self):
+        if self._active_parameter_model is not None:
+            client, model = self._active_parameter_model
+            saved = self._model_parameters.setdefault(client, {}).setdefault(model, {})
+            saved.update(self._parameter_values())
+            self._selected_models[client] = model
+
+    def _refresh_parameter_visibility(self, _=None):
+        specs = {}
+        if self._active_parameter_model is not None:
+            client, model = self._active_parameter_model
+            specs = LLMClient.get_client(client).parameter_specs(model, self._parameter_values())
+        for name, widget in self._parameter_inputs.items():
+            visible = name in specs
+            widget.setVisible(visible)
+            label = self._params_layout.labelForField(widget)
+            if label is not None:
+                label.setVisible(visible)
+
+    def _load_model_parameters(self, client, model):
+        client_cls = LLMClient.get_client(client)
+        values = client_cls.default_parameters(model)
+        values.update(self._model_parameters.get(client, {}).get(model, {}))
+        info = client_cls.get_model_info(model)
+        for name, widget in self._parameter_inputs.items():
+            widget.blockSignals(True)
+            if isinstance(widget, QComboBox):
+                widget.clear()
+                widget.addItems(info.get("reasoning_efforts", []))
+                widget.setCurrentText(values[name] or "")
+            else:
+                if name == "max_length":
+                    widget.setMaximum(info.get("max_output_tokens", 4096))
+                elif name == "thinking_budget":
+                    widget.setMaximum(info.get("max_output_tokens", 4096) - 1)
+                elif name == "temperature":
+                    widget.setMaximum(info.get("temperature_max", 1.0))
+                widget.setValue(values[name])
+            widget.blockSignals(False)
+        self._active_parameter_model = (client, model)
+        self._refresh_parameter_visibility()
 
     def _setup_templates_tab(self):
         """Setup templates tab with a two-column layout supporting note types."""
@@ -405,13 +463,12 @@ class ConfigDialog(QDialog):
         # Set client and model
         client_name = self._config_manager["client"]
         # Set model parameters
-        temperature = self._config_manager["temperature"]
-        max_length = self._config_manager["max_length"]
         max_prompt_tokens = self._config_manager["max_prompt_tokens"]
 
+        self._client_selector.blockSignals(True)
         self._client_selector.setCurrentText(client_name)
-        self._temperature_input.setValue(temperature)
-        self._max_length_input.setValue(max_length)
+        self._client_selector.blockSignals(False)
+        self._on_client_changed(0)
         self._max_prompt_tokens_input.setValue(max_prompt_tokens)
 
         # Set rate limiting parameters for current client
@@ -438,130 +495,69 @@ class ConfigDialog(QDialog):
         self._update_prompt_preview()
 
     def _update_model_list(self):
-        """Update the model list for the current client."""
-
-        try:
-            client_name = self._client_selector.currentText()
-            client_cls = LLMClient.get_client(client_name)
-
-            # Get API key, handling shortened display format
-            api_key = self._api_key_input.text()
-
-            # Check if the key is already in shortened format or empty
-            if not api_key or api_key == self._shorten_key(api_key):
-                # Key is already shortened or empty, get the full key from config
-                api_key = self._config_manager.get_api_key_for_client(client_name)
-
-            # Show loading state
-            self._model_selector.clear()
-
-            if not api_key:
-                # No API key provided - show a message
-                self._model_selector.addItem(
-                    f"Enter {client_name} API key to see models",
-                )
-                self._model_selector.setEnabled(False)
-                # Clear vision support label
-                self._vision_support_label.setText("N/A")
-                self._vision_support_label.setStyleSheet("color: gray; font-weight: bold;")
-                return
-
-            # API key provided - try to fetch models
-            self._model_selector.addItem("Loading models...")
-            self._model_selector.setEnabled(False)
-            # Clear vision support label
-            self._vision_support_label.setText("Loading...")
-            self._vision_support_label.setStyleSheet("color: gray; font-weight: bold;")
-
-            # Check if we're already updating models
-            if not ConfigDialog._model_update_lock.acquire(blocking=False):
-                # Another thread is already updating models, so we'll just return
-                return
-
-            # Create and start worker
-            worker = ModelFetchWorker(client_name, client_cls, api_key)
-            worker.signals.result.connect(self._on_models_loaded)
-            worker.signals.error.connect(self._on_models_error)
-            worker.signals.finished.connect(
-                lambda: ConfigDialog._model_update_lock.release(),
-            )
-
-            # Start the worker
-            QThreadPool.globalInstance().start(worker)
-        except Exception:
-            # Ensure the lock is released even if there's an error
-            ConfigDialog._model_update_lock.release()
-            raise
-
-    def _on_models_loaded(self, models):
-        """Handle successfully loaded models."""
+        """Load static catalogs immediately; ignore stale remote results after switching."""
+        self._store_model_parameters()
+        self._active_parameter_model = None
+        self._models = []
+        self._model_request_id += 1
+        request_id = self._model_request_id
+        client_name = self._client_selector.currentText()
+        client_cls = LLMClient.get_client(client_name)
+        self._model_selector.blockSignals(True)
         self._model_selector.clear()
-        self._model_selector.setEnabled(True)
-        self._models = models  # Store models for later reference
+        self._model_selector.addItem("Loading models...")
+        self._model_selector.blockSignals(False)
+        self._model_selector.setEnabled(False)
+        self._vision_support_label.setText("Loading...")
+        self._refresh_parameter_visibility()
+        if client_name != "OpenRouter":
+            self._on_models_loaded(client_name, request_id, client_cls.get_available_models())
+            return
+        worker = ModelFetchWorker(client_name, client_cls, request_id)
+        worker.signals.result.connect(self._on_models_loaded)
+        worker.signals.error.connect(self._on_models_error)
+        pool = QThreadPool.globalInstance()
+        if pool is not None:
+            pool.start(worker)
 
+    def _on_models_loaded(self, client_name, request_id, models):
+        if request_id != self._model_request_id or client_name != self._client_selector.currentText():
+            return
+        self._model_selector.blockSignals(True)
+        self._model_selector.clear()
+        self._models = models
+        self._model_selector.addItems([model["name"] for model in models])
+        previous_model = self._selected_models.get(client_name, "")
+        if previous_model:
+            self._model_selector.setCurrentText(previous_model)
         if not models:
             self._model_selector.addItem("No models available")
-            # Update vision support indicator
-            self._vision_support_label.setText("N/A")
-            self._vision_support_label.setStyleSheet("color: gray; font-weight: bold;")
+        self._model_selector.setEnabled(bool(models))
+        self._model_selector.blockSignals(False)
+        self._on_model_changed()
+
+    def _on_models_error(self, client_name, request_id, error_msg):
+        if request_id != self._model_request_id or client_name != self._client_selector.currentText():
             return
-
-        # Add each model to the dropdown
-        for model in models:
-            # Each model is now a dict with 'name' and 'vision' keys
-            self._model_selector.addItem(model["name"])
-
-        # Restore previous selection if possible
-        client_name = self._client_selector.currentText()
-        previous_model = self._config_manager.get_model_for_client(client_name)
-
-        if previous_model:
-            index = self._model_selector.findText(previous_model)
-            if index >= 0:
-                self._model_selector.setCurrentIndex(index)
-
-    def _on_models_error(self, error_msg):
-        """Handle errors during model loading."""
-        self._model_selector.clear()
-        self._model_selector.addItem("Error loading models")
-        self._model_selector.setEnabled(False)  # Disable the model selector
-
-        # Update vision support indicator
-        self._vision_support_label.setText("N/A")
-        self._vision_support_label.setStyleSheet("color: gray; font-weight: bold;")
-
-        # Also show an info popup with more details
-        client_name = self._client_selector.currentText()
-        error_message = (
-            f"Could not get model list for {client_name}:\n\n"
-            f"{error_msg}\n\n"
-            "Please check:\n"
-            "- Your API key is correct\n"
-            "- Your internet connection is working\n"
-            "- The API service is available"
-        )
-        showInfo(error_message)
+        self._on_models_loaded(client_name, request_id, [])
+        showInfo(f"Could not get model list for {client_name}:\n\n{error_msg}")
 
     def _on_model_changed(self, _=None):
-        """Handle when the model selection changes."""
-        # Update vision support indicator
+        self._store_model_parameters()
+        self._active_parameter_model = None
         model_name = self._model_selector.currentText()
-
         for model in self._models:
             if model["name"] == model_name:
-                if model["vision"]:
-                    self._vision_support_label.setText("Vision ✓")
-                    self._vision_support_label.setStyleSheet("color: green; font-weight: bold;")
-                else:
-                    self._vision_support_label.setText("Vision ✗")
-                    self._vision_support_label.setStyleSheet("color: red; font-weight: bold;")
+                self._load_model_parameters(self._client_selector.currentText(), model_name)
+                self._vision_support_label.setText("Vision ✓" if model["vision"] else "Vision ✗")
                 return
-
         self._vision_support_label.setText("N/A")
-        self._vision_support_label.setStyleSheet("color: gray;")
+        self._refresh_parameter_visibility()
 
     def _on_client_changed(self, _):
         """Handle client selection changes."""
+        self._store_model_parameters()
+        self._active_parameter_model = None
         # Get the newly selected client
         client_name = self._client_selector.currentText()
         client_cls = LLMClient.get_client(client_name)
@@ -581,11 +577,14 @@ class ConfigDialog(QDialog):
         # Get API key for the new client
         api_key = self._config_manager.get_api_key_for_client(client_name)
 
-        # Update the API key field if we have a key for this client
+        # Update the API key field without triggering a second model fetch.
+        self._api_key_input.blockSignals(True)
         if api_key:
             self._api_key_input.setText(self._shorten_key(api_key))
         else:
             self._api_key_input.setText("")
+
+        self._api_key_input.blockSignals(False)
 
         # Update rate limits for the new client
         requests_per_minute = self._config_manager.get_requests_per_minute_for_client(client_name)
@@ -602,6 +601,10 @@ class ConfigDialog(QDialog):
 
     def _save_config(self):
         """Save the configuration."""
+        if self._active_parameter_model is None:
+            showInfo("Select an available model before saving.")
+            return
+        self._store_model_parameters()
         client_name = self._client_selector.currentText()
 
         # Update the current note type config and get the full note_prompts dictionary
@@ -609,14 +612,13 @@ class ConfigDialog(QDialog):
 
         config = {
             "client": client_name,
-            "temperature": self._temperature_input.value(),
-            "max_length": self._max_length_input.value(),
+            "model_parameters": copy.deepcopy(self._model_parameters),
+            "models": dict(self._selected_models),
             "max_prompt_tokens": self._max_prompt_tokens_input.value(),
             "shortcut": self._shortcut_input.text(),
         }
 
         api_keys = self._config_manager.get("api_keys", {})
-        models = self._config_manager.get("models", {})
         requests_per_minute = self._config_manager.get("requests_per_minute", {})
         tokens_per_minute = self._config_manager.get("tokens_per_minute", {})
 
@@ -627,9 +629,6 @@ class ConfigDialog(QDialog):
             api_key = self._config_manager.get_api_key_for_client(client_name)
         # Update the API key for the current client
         api_keys[client_name] = api_key
-
-        if model_name := self._model_selector.currentText():
-            models[client_name] = model_name
 
         # Update rate limits for the current client
         requests_per_minute[client_name] = self._requests_per_minute_input.value()
@@ -695,11 +694,11 @@ class ConfigDialog(QDialog):
         if dialog.exec():
             # User selected a card and hit OK
             note_id = dialog.get_selected_note_id()
-            if note_id:
+            if note_id and mw.col is not None:
                 self._selected_note = mw.col.get_note(note_id)
 
                 # Update the UI
-                note_type = self._selected_note.note_type()["name"]
+                note_type = (self._selected_note.note_type() or {})["name"]
                 first_field_content = self._selected_note.fields[0]
 
                 # Truncate content if too long
@@ -726,7 +725,12 @@ class ConfigDialog(QDialog):
         row_widget = QWidget()
 
         def get_valid_field_names() -> list[str]:
-            note_type_fields = mw.col.models.by_name(self._current_note_type)["flds"]
+            if mw.col is None:
+                return []
+            note_type = mw.col.models.by_name(self._current_note_type)
+            if note_type is None:
+                return []
+            note_type_fields = note_type["flds"]
             existing_mappings = {mapping["prompt_var_input"].currentText() for mapping in self._field_mapping_widgets}
             return [field["name"] for field in note_type_fields if field["name"] not in existing_mappings]
 
@@ -808,7 +812,9 @@ class ConfigDialog(QDialog):
         self._field_mappings_layout.removeWidget(mapping["widget"])
         # Add field name to all other field inputs
         for other in self._field_mapping_widgets:
-            other["prompt_var_input"].addItem(mapping["prompt_var_input"].currentText())
+            cast("QComboBox", other["prompt_var_input"]).addItem(
+                cast("QComboBox", mapping["prompt_var_input"]).currentText(),
+            )
 
         # Remove from our tracking list
         for idx, other in enumerate(self._field_mapping_widgets):
@@ -1062,8 +1068,7 @@ class DebugDialog(QDialog):
         requests_per_minute = self._config_manager.get_requests_per_minute_for_client(client_name)
         tokens_per_minute = self._config_manager.get_tokens_per_minute_for_client(client_name)
 
-        temperature = self._config_manager["temperature"]
-        max_length = self._config_manager["max_length"]
+        parameters = self._config_manager.get_model_parameters(client_name)
 
         # Disable the query button and update status
         self._query_button.setEnabled(False)
@@ -1074,8 +1079,7 @@ class DebugDialog(QDialog):
             client_name,
             api_key,
             model_name,
-            temperature,
-            max_length,
+            parameters,
             prompt,
             requests_per_minute,
             tokens_per_minute,
@@ -1116,8 +1120,7 @@ class DebugLLMWorker(QRunnable):
         client_name,
         api_key,
         model_name,
-        temperature,
-        max_length,
+        parameters,
         prompt,
         requests_per_minute,
         tokens_per_minute,
@@ -1126,8 +1129,7 @@ class DebugLLMWorker(QRunnable):
         self.client_name = client_name
         self.api_key = api_key
         self.model_name = model_name
-        self.temperature = temperature
-        self.max_length = max_length
+        self.parameters = parameters
         self.prompt = prompt
         self.requests_per_minute = requests_per_minute
         self.tokens_per_minute = tokens_per_minute
@@ -1139,8 +1141,7 @@ class DebugLLMWorker(QRunnable):
             client = client_cls(
                 api_key=self.api_key,
                 model=self.model_name,
-                temperature=self.temperature,
-                max_length=self.max_length,
+                **self.parameters,
                 requests_per_minute=self.requests_per_minute,
                 tokens_per_minute=self.tokens_per_minute,
             )
@@ -1233,8 +1234,9 @@ class CardSelectDialog(QDialog):
         self.deck_selector.addItem("All Decks", "")
 
         # Get all decks
-        decks = mw.col.decks.all_names_and_ids()
-        decks.sort(key=lambda x: x.name)
+        if mw.col is None:
+            return
+        decks = sorted(mw.col.decks.all_names_and_ids(), key=lambda x: x.name)
 
         # Add each deck to the selector
         for deck in decks:
@@ -1266,8 +1268,12 @@ class CardSelectDialog(QDialog):
             query = base_query or "added:30"  # Default to recent cards if no query
 
         try:
+            col = mw.col
+            if col is None:
+                self.status_label.setText("No Anki collection is open.")
+                return
             self.status_label.setText(f"Searching with query: {query}")
-            card_ids = mw.col.find_cards(query)
+            card_ids = col.find_cards(query)
             self.results_list.clear()
 
             if not card_ids:
@@ -1287,10 +1293,10 @@ class CardSelectDialog(QDialog):
 
             # Add cards to the list
             for card_id in displayed_cards:
-                card = mw.col.get_card(card_id)
+                card = col.get_card(card_id)
                 note = card.note()
-                note_type = note.note_type()["name"]
-                deck_name = mw.col.decks.name(card.did)
+                note_type = (note.note_type() or {})["name"]
+                deck_name = col.decks.name(card.did)
 
                 # Get the first field content
                 first_field = note.fields[0]
@@ -1324,35 +1330,25 @@ def open_config_dialog():
 
 
 class ModelFetchWorkerSignals(QObject):
-    """Signals for the model fetching worker."""
+    """Tag remote results so a later model/provider selection cannot be overwritten."""
 
-    result = pyqtSignal(list)
-    error = pyqtSignal(str)
-    finished = pyqtSignal()
+    result = pyqtSignal(str, int, list)
+    error = pyqtSignal(str, int, str)
 
 
 class ModelFetchWorker(QRunnable):
     """Worker for fetching model list from API."""
 
-    def __init__(self, client_name, client_cls, api_key):
+    def __init__(self, client_name, client_cls, request_id):
         super().__init__()
         self.client_name = client_name
         self.client_cls = client_cls
-        self.api_key = api_key
+        self.request_id = request_id
         self.signals = ModelFetchWorkerSignals()
 
     def run(self):
-        # Set up a timeout for network operations
-        original_timeout = socket.getdefaulttimeout()
-        socket.setdefaulttimeout(5.0)  # 5 second timeout
-
         try:
-            # Get models (returns a list of dicts with name and vision keys)
             models = self.client_cls.get_available_models()
-            self.signals.result.emit(models)
+            self.signals.result.emit(self.client_name, self.request_id, models)
         except Exception as e:
-            self.signals.error.emit(str(e))
-        finally:
-            # Restore original timeout
-            socket.setdefaulttimeout(original_timeout)
-            self.signals.finished.emit()
+            self.signals.error.emit(self.client_name, self.request_id, str(e))

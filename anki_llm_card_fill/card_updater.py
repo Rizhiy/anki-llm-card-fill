@@ -61,7 +61,11 @@ class NoteUpdateWorker(QRunnable):
         """Perform the full note update process."""
         try:
             config_manager = ConfigManager()
-            note_type_name = self.note.note_type()["name"]
+            note_type = self.note.note_type()
+            if note_type is None:
+                self.log_and_emit("The note type is no longer available.")
+                return
+            note_type_name = note_type["name"]
             try:
                 config_manager.validate_settings(note_type_name)
             except ValueError as e:
@@ -92,8 +96,7 @@ class NoteUpdateWorker(QRunnable):
             client_cls = LLMClient.get_client(client_name)
             client = client_cls(
                 model=config_manager.get_model_for_client(client_name),
-                temperature=config_manager["temperature"],
-                max_length=config_manager["max_length"],
+                **config_manager.get_model_parameters(client_name),
                 api_key=config_manager.get_api_key_for_client(client_name),
                 requests_per_minute=config_manager.get_requests_per_minute_for_client(client_name),
                 tokens_per_minute=config_manager.get_tokens_per_minute_for_client(client_name),
@@ -112,6 +115,9 @@ class NoteUpdateWorker(QRunnable):
                 if field_name in self.note:
                     self.note[field_name] = content
 
+            if mw.col is None:
+                self.log_and_emit("No Anki collection is open")
+                return
             mw.col.update_note(self.note)
 
             # Signal success
@@ -152,7 +158,10 @@ def update_note_fields(note: Note) -> bool:
 
     # Start with the global thread pool
     tooltip("Calling LLM...")
-    QThreadPool.globalInstance().start(worker)
+    pool = QThreadPool.globalInstance()
+    if pool is None:
+        return False
+    pool.start(worker)
 
     # Process events while waiting for completion
     while not completed:
@@ -203,6 +212,9 @@ def update_browser_notes(browser: Browser) -> None:
     config_manager = ConfigManager()
     client_name = config_manager["client"]
     requests_per_minute = config_manager.get_requests_per_minute_for_client(client_name)
+    if mw.col is None:
+        showInfo("No Anki collection is open.")
+        return
     notes = [mw.col.get_note(nid) for nid in selected_nids]
 
     # Ask for confirmation if many notes selected
@@ -291,6 +303,9 @@ def process_notes_in_parallel(notes: list[Note]) -> None:
 
     # Submit tasks to thread pool
     pool = QThreadPool.globalInstance()
+    if pool is None:
+        showInfo("Background processing is unavailable.")
+        return
     for note in notes:
         if canceled:
             break

@@ -1,48 +1,185 @@
 {
-  "models": [
-    {
-      "name": "claude-3-opus-20240229",
-      "vision": true
-    },
-    {
-      "name": "claude-3-sonnet-20240229",
-      "vision": true
-    },
-    {
-      "name": "claude-3-haiku-20240307",
-      "vision": true
-    },
-    {
-      "name": "claude-2.1",
-      "vision": false
-    },
-    {
-      "name": "claude-2.0",
-      "vision": false
-    },
-    {
-      "name": "claude-instant-1.2",
-      "vision": false
-    },
-    {
-        "name": "claude-3-5-haiku-20241022",
-        "vision": true
-    },
-    {
-        "name": "claude-3-5-sonnet-20241022",
-        "vision": true
-    },
-    {
-        "name": "claude-3-7-sonnet-20250219",
-        "vision": true
-    },
-    {
-        "name": "claude-sonnet-4-20250514",
-        "vision": true
-    },
-    {
-        "name": "claude-opus-4-1-20250805",
-        "vision": true
-    }
-  ]
+    "models": [
+        {
+            "name": "claude-3-opus-20240229",
+            "vision": true
+        },
+        {
+            "name": "claude-3-sonnet-20240229",
+            "vision": true
+        },
+        {
+            "name": "claude-3-haiku-20240307",
+            "vision": true
+        },
+        {
+            "name": "claude-2.1",
+            "vision": false
+        },
+        {
+            "name": "claude-2.0",
+            "vision": false
+        },
+        {
+            "name": "claude-instant-1.2",
+            "vision": false
+        },
+        {
+            "name": "claude-3-5-haiku-20241022",
+            "vision": true
+        },
+        {
+            "name": "claude-3-5-sonnet-20241022",
+            "vision": true
+        },
+        {
+            "name": "claude-3-7-sonnet-20250219",
+            "vision": true,
+            "thinking": "enabled",
+            "max_output_tokens": 64000
+        },
+        {
+            "name": "claude-sonnet-4-20250514",
+            "vision": true,
+            "thinking": "enabled",
+            "max_output_tokens": 64000
+        },
+        {
+            "name": "claude-opus-4-1-20250805",
+            "vision": true,
+            "thinking": "enabled",
+            "max_output_tokens": 32000
+        },
+        {
+            "name": "claude-haiku-4-5",
+            "vision": true,
+            "thinking": "enabled",
+            "max_output_tokens": 64000
+        },
+        {
+            "name": "claude-sonnet-4-5",
+            "vision": true,
+            "thinking": "enabled",
+            "max_output_tokens": 64000
+        },
+        {
+            "name": "claude-opus-4-5",
+            "vision": true,
+            "thinking": "enabled",
+            "reasoning_efforts": [
+                "low",
+                "medium",
+                "high"
+            ],
+            "default_effort": "high",
+            "max_output_tokens": 64000
+        },
+        {
+            "name": "claude-sonnet-4-6",
+            "vision": true,
+            "thinking": "adaptive",
+            "reasoning_efforts": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "max"
+            ],
+            "default_effort": "off",
+            "max_output_tokens": 64000
+        },
+        {
+            "name": "claude-opus-4-6",
+            "vision": true,
+            "thinking": "adaptive",
+            "reasoning_efforts": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "max"
+            ],
+            "default_effort": "off",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "claude-opus-4-7",
+            "vision": true,
+            "temperature": false,
+            "thinking": "adaptive",
+            "reasoning_efforts": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+            ],
+            "default_effort": "off",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "claude-opus-4-8",
+            "vision": true,
+            "temperature": false,
+            "thinking": "adaptive",
+            "reasoning_efforts": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+            ],
+            "default_effort": "off",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "claude-opus-5",
+            "vision": true,
+            "temperature": false,
+            "thinking": "adaptive",
+            "reasoning_efforts": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+            ],
+            "default_effort": "high",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "claude-sonnet-5",
+            "vision": true,
+            "temperature": false,
+            "thinking": "adaptive",
+            "reasoning_efforts": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+            ],
+            "default_effort": "high",
+            "max_output_tokens": 128000
+        },
+        {
+            "name": "claude-fable-5-1",
+            "vision": true,
+            "temperature": false,
+            "thinking": "adaptive",
+            "reasoning_efforts": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+            ],
+            "default_effort": "high",
+            "max_output_tokens": 128000
+        }
+    ]
 }

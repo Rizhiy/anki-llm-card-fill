@@ -216,8 +216,9 @@ class CardCreationDialog(QDialog):
         """Load available decks from Anki collection."""
         self._deck_selector.clear()
 
-        decks = mw.col.decks.all_names_and_ids()
-        decks.sort(key=lambda x: x.name)
+        if mw.col is None:
+            return
+        decks = sorted(mw.col.decks.all_names_and_ids(), key=lambda x: x.name)
 
         for deck in decks:
             self._deck_selector.addItem(deck.name, deck.id)
@@ -291,6 +292,12 @@ class CardCreationDialog(QDialog):
                     is_create_only=True,
                 )
 
+    def _get_current_note_fields(self) -> list[dict]:
+        if mw.col is None:
+            return []
+        note_type = mw.col.models.by_name(self._current_note_type)
+        return note_type["flds"] if note_type is not None else []
+
     def _create_field_mapping_row(
         self,
         *,
@@ -303,7 +310,7 @@ class CardCreationDialog(QDialog):
 
         def get_valid_field_names() -> list[str]:
             # Get all field names from note type
-            note_type_fields = mw.col.models.by_name(self._current_note_type)["flds"]
+            note_type_fields = self._get_current_note_fields()
             all_fields = [field["name"] for field in note_type_fields]
             existing_mappings = {mapping["prompt_var_input"].currentText() for mapping in self._field_mapping_widgets}
             return [field for field in all_fields if field not in existing_mappings]
@@ -506,8 +513,7 @@ class CardCreationDialog(QDialog):
         try:
             client = client_cls(
                 model=model_name,
-                temperature=self._config_manager["temperature"],
-                max_length=self._config_manager["max_length"],
+                **self._config_manager.get_model_parameters(client_name),
                 api_key=self._config_manager.get_api_key_for_client(client_name),
                 requests_per_minute=self._config_manager.get_requests_per_minute_for_client(client_name),
                 tokens_per_minute=self._config_manager.get_tokens_per_minute_for_client(client_name),
@@ -534,7 +540,12 @@ class CardCreationDialog(QDialog):
                 showInfo(f"Error parsing response: {field_updates['error']}")
                 return
 
-            note = mw.col.new_note(mw.col.models.by_name(note_type_name))
+            col = mw.col
+            note_type = col.models.by_name(note_type_name) if col is not None else None
+            if col is None or note_type is None:
+                showInfo("The selected note type is no longer available.")
+                return
+            note = col.new_note(note_type)
 
             for field_name, content in field_updates.items():
                 if field_name in note:
@@ -545,8 +556,8 @@ class CardCreationDialog(QDialog):
             if first_field and not note[first_field]:
                 note[first_field] = user_input
 
-            mw.col.add_note(note, deck_id)
-            mw.col.save()
+            col.add_note(note, deck_id)
+            col.save()
 
             # Use tooltip instead of showInfo and keep dialog open
             tooltip("Card created successfully!")  # Show for 3 seconds
@@ -595,7 +606,7 @@ class CardCreationDialog(QDialog):
     def _add_new_create_only_field(self):
         """Add a new create-only field to the mapping."""
         # Check if there are any fields available to add
-        note_type_fields = mw.col.models.by_name(self._current_note_type)["flds"]
+        note_type_fields = self._get_current_note_fields()
         all_fields = {field["name"] for field in note_type_fields}
 
         # Get fields already in use (both template and create-only)
@@ -618,7 +629,7 @@ class CardCreationDialog(QDialog):
     def _update_add_field_button_state(self):
         """Enable or disable the Add Field button based on available fields."""
         # Get all field names from note type
-        note_type_fields = mw.col.models.by_name(self._current_note_type)["flds"]
+        note_type_fields = self._get_current_note_fields()
         all_fields = {field["name"] for field in note_type_fields}
 
         # Get fields already in use
