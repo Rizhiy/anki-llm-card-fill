@@ -6,7 +6,6 @@ import logging
 import os
 import secrets
 import tempfile
-import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
 from pathlib import Path
